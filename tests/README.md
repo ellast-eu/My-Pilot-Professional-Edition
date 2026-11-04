@@ -50,6 +50,7 @@ nul si quelque chose a cassé. Les plus récentes :
 | `test60.js` | réagencer les champs d'une catégorie : flèches, glisser, défilement |
 | `test61.js` | source automatique d'une rubrique, unicité, et garde-fou à la suppression |
 | `test62.js` | notes sans rattachement : les retrouver et les ranger |
+| `test63.js` | Options en six sections : rien de perdu, et ce qui va ensemble l'est |
 | `test59.js` | le convertisseur de l'ancien format, et le rechargement du résultat |
 | `pagi5.js` | pagination du rapport imprimé, sous charge |
 | `mesure.js` | mise en page de la carte des idées à plusieurs largeurs |

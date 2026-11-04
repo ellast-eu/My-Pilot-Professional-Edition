@@ -49,7 +49,8 @@ const ok=[],ko=[]; const T=(n,c,d='')=>{(c?ok:ko).push(n+(d?' — '+d:''))};
       qui:'',entreprise:'',tel:'',commune:'',duree:0,objet:'',suite:'',suite_faite:false}
    ];
    window.__fichiers={};
-   vueActive='donnees'; rendre();
+   /* v1.5 : les exports vivent dans la section Import et export. */
+   vueActive='donnees'; ongletOptions='echanges'; rendre();
  });
  await poser(); await p.waitForTimeout(400);
 

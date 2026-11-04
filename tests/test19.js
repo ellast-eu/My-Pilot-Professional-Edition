@@ -10,7 +10,8 @@ const {chromium}=require('playwright'); const fs=require('fs');
  const errs=[]; p.on('pageerror',e=>errs.push(''+e));
  await p.addInitScript(d=>localStorage.setItem('pst-pilot-v1',d), fs.readFileSync(FIX+'/jeu-essai.json','utf8'));
  await p.goto(''+APP+''); await p.waitForTimeout(1400);
- await p.evaluate(()=>{ fichierCharge=true; vueActive='donnees'; rendre() });
+ /* v1.5 : les rubriques vivent dans la section Organisation. */
+ await p.evaluate(()=>{ fichierCharge=true; vueActive='donnees'; ongletOptions='organisation'; rendre() });
  await p.waitForTimeout(400);
  const noms=()=>p.evaluate(()=>rubriques().map(r=>r.nom));
  console.log('ordre initial :', (await noms()).join(' | '));

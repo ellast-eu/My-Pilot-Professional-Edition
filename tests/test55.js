@@ -30,8 +30,11 @@ const ok=[],ko=[]; const T=(n,c,d='')=>{(c?ok:ko).push(n+(d?' — '+d:''))};
    .map(x=>x.dataset.vue+':'+x.textContent).join(' · '));
  T('l’onglet Données s’appelle Options', /donnees:Options/.test(ong), ong);
  T('  la clé interne reste « donnees »', /donnees:/.test(ong));
+ /* La rubrique s'appelle simplement « Options » depuis la v1.5, l'écran n'étant plus
+    un fourre-tout « fichier et exports ». Ce qui compte reste le même : l'aide parle
+    d'Options, et plus de l'onglet Données. */
  T('l’aide a suivi', await p.evaluate(()=>
-   AIDE.some(r=>r.titre==='Options, fichier et exports')
+   AIDE.some(r=>r.id==='donnees' && /^Options/.test(r.titre))
    && !AIDE.some(r=>/onglet Données/.test(r.html))));
  /* Les versions antérieures portent désormais le suffixe -private (v1.0-public),
     mais leur TEXTE n'a pas été réécrit : l'entrée 3.19.0 raconte toujours ce qui s'est
@@ -40,7 +43,8 @@ const ok=[],ko=[]; const T=(n,c,d='')=>{(c?ok:ko).push(n+(d?' — '+d:''))};
    JOURNAL_VERSIONS.some(v=>/^3\.19\.0(-private)?$/.test(v[0]) && /depuis Données/.test(v[1]))));
 
  /* --- 2. le réglage existe et bascule -------------------------------------- */
- await p.evaluate(()=>{ vueActive='donnees'; rendre() }); await p.waitForTimeout(400);
+ /* v1.5 : le format des dates vit dans la section Affichage. */
+ await p.evaluate(()=>{ vueActive='donnees'; ongletOptions='affichage'; rendre() }); await p.waitForTimeout(400);
  const sel=await p.evaluate(()=>{const e=document.getElementById('fmtDate');
    return e?{v:e.value, opts:[...e.options].map(o=>o.value).join(',')}:null});
  T('le réglage est dans Options', !!sel, JSON.stringify(sel));
@@ -246,7 +250,7 @@ const ok=[],ko=[]; const T=(n,c,d='')=>{(c?ok:ko).push(n+(d?' — '+d:''))};
    o.tache={vu:L.call(ft), iso:ft.value, lisible:dateValide(ft.value)};
    fermerModale();
    /* d) la vue Options, écrite par rendre() */
-   vueActive='donnees'; rendre();
+   vueActive='donnees'; ongletOptions='echanges'; rendre();
    const pd=document.getElementById('perDeb');
    o.options={type:pd.type, arme:pd.__fr===true};
    return o;

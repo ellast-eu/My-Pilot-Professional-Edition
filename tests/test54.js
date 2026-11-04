@@ -209,7 +209,7 @@ const JR={}; for(let k=-30;k<=30;k++) JR[k]=J(k);
  /* ===== 8. la liste des types est gérable ================================ */
  const lst=await p.evaluate(()=>{
    fichierCharge=true; D=vierge();
-   vueActive='donnees'; rendre();
+   vueActive='donnees'; ongletOptions='listes'; rendre();
    const t=document.querySelector('[data-liste-txt="types_evenement"]');
    return {present:!!t, valeurs:t?t.value.split('\n').length:0, def:typesEvt().length};
  });

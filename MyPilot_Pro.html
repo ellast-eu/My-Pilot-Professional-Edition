@@ -764,6 +764,17 @@ tr.arch td b{font-weight:normal}
   cursor:pointer;font-size:13px;line-height:1;padding:4px 6px;color:var(--encre-2)}
 .fr-cal:hover{background:var(--beton-2)}
 input.fr-faux{border-color:var(--rouge);background:rgba(200,30,30,.06)}
+/* La seconde rangee d'onglets : visiblement subordonnee a la premiere, jamais
+   confondue avec elle — plus petite, plus claire, soulignee et non inversee. */
+.grille-listes{display:grid;gap:0 18px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.sous-nav{display:flex;flex-wrap:wrap;gap:2px;margin:0 0 16px;
+  border-bottom:1px solid var(--trait);padding-bottom:0}
+.sous-nav button{border:0;background:none;font:inherit;font-size:13px;letter-spacing:.04em;
+  color:var(--encre-2);cursor:pointer;padding:7px 13px;border-bottom:2px solid transparent;
+  margin-bottom:-1px}
+.sous-nav button:hover{color:var(--encre);background:var(--beton)}
+.sous-nav button.actif{color:var(--encre);border-bottom-color:var(--rouge);font-weight:600}
+@media(max-width:560px){ .sous-nav button{padding:7px 9px;font-size:12.5px} }
 .rub-nom{flex:1 1 150px;min-width:110px}
 .rub-fam{font-size:12px;max-width:140px}
 .rub-auto{font-size:12px;max-width:170px}
@@ -818,6 +829,7 @@ hr.sep{border:0;border-top:1px solid var(--trait);margin:18px 0}
     <button data-vue="idees">Idées</button>
     <button data-vue="journal">Journal</button>
     <button data-vue="contacts">Contacts</button>
+    <button data-vue="rapport">Rapport</button>
     <button data-vue="donnees">Options</button>
   </nav>
 </header>
@@ -842,7 +854,7 @@ hr.sep{border:0;border-top:1px solid var(--trait);margin:18px 0}
 "use strict";
 
 /* ================= etat ================= */
-var APP_VERSION = "1.4-public";
+var APP_VERSION = "1.5-public";
 
 /* ============================================================
    NOM DU POSTE — a modifier ici lors du deploiement sur un
@@ -5255,19 +5267,83 @@ function vueJournal(){
   +(corps||'<div class="vide"><b>Journal vide</b>Les notes et les appels de permanence apparaîtront ici.</div>')
   +'</div></div>';
 }
-function vueDonnees(){
+/* ============ Options : six sections, une tache chacune ============
+   L'ecran faisait 3 863 px pour 98 controles repartis en quatre blocs, dont deux
+   fourre-tout : « Fichier de donnees » contenait le rapport, l'identite et le
+   compte-rendu ; « Parametres » melangeait l'affichage, l'organisation et la
+   configuration. Deux selecteurs de periode y cohabitaient, et l'import Excel etait
+   separe de son propre reglage par trois ecrans.
+
+   Chaque section repond desormais a « je veux faire quoi », et ce qui va ensemble se
+   trouve ensemble. Le rapport, qui n'est pas un reglage mais une production, a son
+   propre onglet. */
+
+var ongletOptions="fichier";
+var SECTIONS_OPT=[
+  ["fichier","Fichier"],
+  ["echanges","Import et export"],
+  ["organisation","Organisation"],
+  ["categories","Catégories"],
+  ["listes","Listes"],
+  ["affichage","Affichage"]
+];
+
+function fragSousOnglets(){
+  return '<div class="sous-nav">'+SECTIONS_OPT.map(function(x){
+    return '<button data-sopt="'+x[0]+'"'+(ongletOptions===x[0]?' class="actif" aria-current="page"':"")
+      +'>'+esc(x[1])+'</button>';
+  }).join("")+'</div>';
+}
+
+/* Les alertes de chargement ne vivent dans aucune section : elles reclament une
+   action, et une alerte rangee derriere un onglet n'est pas une alerte. */
+function fragAlertesDonnees(){
+  var h="";
+  if(ORPHELINS.n){
+    var l=Object.keys(ORPHELINS.cles);
+    h+='<div class="bloc" style="margin:0 0 14px;border-left:4px solid var(--jaune)">'
+      +'<div class="bloc-corps"><div class="txt" style="font-size:14px;margin-bottom:4px"><b>'
+      +ORPHELINS.n+' fiche(s) portaient une catégorie inconnue au dernier chargement</b></div>'
+      +'<div class="note-aide" style="margin:0 0 8px">Ces clés ne correspondent à aucune catégorie du '
+      +'fichier — faute de frappe, majuscule, pluriel. Les fiches ont été rattachées à '
+      +esc(ORPHELINS.vers)+' faute de mieux. Corrigez la clé dans le JSON, ou créez la catégorie '
+      +'manquante, puis rechargez.</div>'
+      +'<div class="diag">'+l.map(function(k){
+          return '<div>'+esc(k)+'<b class="ko">'+ORPHELINS.cles[k]+'</b></div>';
+        }).join("")+'</div></div></div>';
+  }
+  var inc=incoherences();
+  if(inc.n){
+    h+='<div class="bloc" style="margin:0 0 14px;border-left:4px solid var(--rouge)">'
+      +'<div class="bloc-corps"><div class="txt" style="font-size:14px;margin-bottom:4px">'
+      +'<b>'+inc.n+' activité(s) portent un statut étranger à leur catégorie</b></div>'
+      +'<div class="note-aide" style="margin:0 0 8px">Ces fiches ont probablement changé de catégorie '
+      +'lors d\'un chargement de fichier antérieur à la version 3.1.0. Leur statut d\'origine est intact '
+      +'et permet de retrouver la bonne catégorie.</div>'
+      +inc.par.map(function(x){
+          var K=catParCle(x.cat);
+          return '<div class="note"><div class="h">'+esc(K?K.plur||K.lib:x.cat)+' · '+x.total+' fiche(s)</div>'
+            +'<div class="txt" style="font-size:12.5px">'
+            +Object.keys(x.statuts).slice(0,6).map(function(k){ return esc(libStatut(k))+' ('+x.statuts[k]+')' }).join(", ")
+            +'</div></div>';
+        }).join("")
+      +'<div class="ligne" style="margin-top:8px">'
+        +'<button class="b mini" data-act="diag-rep">Proposer une correction</button></div>'
+      +'</div></div>';
+  }
+  return h;
+}
+
+/* ---- 1. Fichier : ou vivent mes donnees, et dans quel etat ---- */
+function sectionFichier(){
   var fsa=fsaDispo(),loc=localDispo();
-  var abs=(D.parametres.absences||[]).slice().sort();
-  return (fichierCharge?"":'<div class="bloc" style="margin-bottom:18px;border-left:4px solid var(--rouge)">'+'<div class="bloc-corps"><div class="vide" style="padding:12px 8px">'+'<b>Commencez par ouvrir votre fichier de données</b>'+'Les autres onglets restent inaccessibles tant qu\'aucun fichier n\'est chargé, pour éviter de saisir dans le vide.</div>'+'<div class="ligne" style="justify-content:center">'+'<button class="b" data-act="lier">Ouvrir ou créer un fichier</button>'+'<button class="lien" data-act="sans-fichier">continuer sans fichier</button>'+'</div></div></div>')
-  +'<div class="duo"><div>'
-  +'<div class="bloc"><div class="bloc-tete"><h2>Fichier de données</h2></div><div class="bloc-corps">'
+  return '<div class="bloc"><div class="bloc-tete"><h2>Fichier de données</h2></div><div class="bloc-corps">'
     +'<div class="ligne">'
       +'<button class="b" data-act="enr">Enregistrer</button>'
       +'<button class="b creux" data-act="lier">Lier un fichier</button>'
       +'<button class="b creux" data-act="enr-sous">Enregistrer sous…</button>'
       +'<button class="b creux" data-act="ouvrir">Ouvrir un fichier</button>'
       +'<button class="b creux" data-act="fusion">Importer et fusionner</button>'
-      +'<button class="b creux" data-act="imp-xlsx">Importer des dossiers (Excel)</button>'
     +'</div>'
     +'<div class="ligne" style="margin-top:10px"><label style="font-size:13.5px;display:flex;gap:6px;align-items:center">'
       +'<input type="checkbox" id="autoEnr" '+(D.parametres.auto!==false?"checked":"")+'>'
@@ -5278,62 +5354,6 @@ function vueDonnees(){
             ? 'lié. L\'enregistrement s\'effectue automatiquement à chaque modification, jusqu\'à la fermeture de l\'onglet.'
             : 'lié. L\'enregistrement automatique est désactivé : pensez à <span class="mono">Ctrl+S</span>.')
         : 'pas encore lié. Cliquez sur <em>Lier un fichier</em> ou <em>Ouvrir un fichier</em> : après ce clic unique, tout s\'enregistre seul.')+'</div>'
-    +'<hr class="sep">'
-    +'<div class="ligne">'
-      +'<button class="b creux" data-act="exp-json">Exporter en JSON</button>'
-      +'<button class="b creux" data-act="exp-csv">Exporter les activités (CSV)</button>'
-      +'<button class="b creux" data-act="exp-csvn">Exporter les notes (CSV)</button>'
-      +'<button class="b creux" data-act="exp-csvd">Exporter le compteur de traitement (CSV)</button>'
-      +'<button class="b creux" data-act="exp-csva">Exporter les appels (CSV)</button>'
-      +'<button class="b creux" data-act="exp-csvv">Exporter les vérifications (CSV)</button>'
-    +'</div>'
-    +'<div class="ligne" style="margin-top:8px">'
-      +'<span class="puce-lbl">Période des CSV</span>'
-      +inDate('id="perDeb"',perDeb)
-      +'<span style="font-size:13px;color:var(--encre-2)">au</span>'
-      +inDate('id="perFin"',perFin)
-      +((perDeb||perFin)?'<button class="lien" data-act="per-raz">tout l\'historique</button>'
-        :'<span class="note-aide" style="margin:0">vide = tout l\'historique</span>')
-    +'</div>'
-    +'<hr class="sep" style="margin:14px 0 10px">'
-    +'<div class="ligne">'
-      +'<span class="puce-lbl">Rapport de période</span>'
-      +inDate('id="rapDeb"',rapDeb||moisIso(0)[0])
-      +'<span style="font-size:13px;color:var(--encre-2)">au</span>'
-      +inDate('id="rapFin"',rapFin||moisIso(0)[1])
-      +'<button class="b creux" data-act="rapport">Rapport texte</button>'
-      +'<button class="b" data-act="rapport-pdf">Rapport PDF</button>'
-    +'</div>'
-    +'<div class="ligne" style="margin-top:6px">'
-      +'<button class="lien" data-act="rap-mois">mois en cours</button>'
-      +'<button class="lien" data-act="rap-moisp">mois précédent</button>'
-      +'<button class="lien" data-act="rap-an">année en cours</button>'
-      +'<label style="font-size:13.5px;display:flex;gap:6px;align-items:center;margin-left:auto">'
-        +'<input type="checkbox" id="rapTxtOn" '+(rapTexte?"checked":"")+'> Inclure le détail en texte libre</label>'
-    +'</div>'
-    +'<div class="grille" style="margin-top:10px">'
-      +'<label class="champ">Nom affiché sur le rapport<input type="text" id="idNom" value="'+esc(D.parametres.id_nom||"")+'" placeholder="Prénom NOM"></label>'
-      +'<label class="champ">Fonction<input type="text" id="idFonc" value="'+esc(D.parametres.id_fonction||"")+'" placeholder="Votre fonction"></label>'
-      +'<label class="champ">Entité<input type="text" id="idEnt" value="'+esc(D.parametres.id_entite||"")+'" placeholder="Votre service"></label>'
-    +'</div>'
-    +'<label class="champ" style="margin-top:8px">Faits marquants — repris dans le rapport PDF'
-      +'<textarea id="rapFaits" style="width:100%;min-height:64px;padding:8px;border:1px solid var(--trait);border-radius:2px" '
-      +'placeholder="Ce que les chiffres ne disent pas : reprises de portefeuille, appuis apportés, initiatives…">'+esc(D.parametres.rap_faits||"")+'</textarea></label>'
-    +'<label class="champ" style="margin-top:8px">Objectifs et besoins'
-      +'<textarea id="rapObj" style="width:100%;min-height:52px;padding:8px;border:1px solid var(--trait);border-radius:2px" '
-      +'placeholder="Formations souhaitées, évolution de poste, moyens nécessaires…">'+esc(D.parametres.rap_objectifs||"")+'</textarea></label>'
-    +'<div class="note-aide">Le rapport PDF s\'ouvre dans le dialogue d\'impression : choisissez '
-      +'« Enregistrer au format PDF » et décochez « En-têtes et pieds de page ».</div>'
-    +'<div class="note-aide">Sans le détail, le rapport ne contient que des volumes et des libellés '
-      +'issus de vos listes : ni nom, ni référence de dossier, ni référence technique. Avec le détail, vos saisies sont '
-      +'reprises telles quelles et doivent être relues avant diffusion.</div>'
-    +'<hr class="sep" style="margin:14px 0 10px">'
-    +'<div class="ligne">'
-      +'<span class="puce-lbl">Compte-rendu du</span>'
-      +inDate('id="expDate"',dateExport||auj())
-      +'<button class="b" data-act="cr">Établir le compte-rendu</button>'
-      +((dateExport&&dateExport!==auj())?'<button class="lien" data-act="cr-auj">revenir à aujourd\'hui</button>':"")
-    +'</div>'
     +'<div class="note-aide">Vos données sont conservées dans le fichier lié. Aucun autre fichier n\'est lu au démarrage.</div>'
   +'</div></div>'
   +'<div class="bloc" style="margin-top:18px"><div class="bloc-tete"><h2>Diagnostic du poste</h2></div><div class="bloc-corps diag">'
@@ -5352,106 +5372,59 @@ function vueDonnees(){
     +'<div>Origine<b>'+esc(location.protocol)+'</b></div>'
     +'<div>Volume<b>'+D.chantiers.length+' activités · '+D.notes.length+' notes · '+(D.appels||[]).length+' appels · '+Math.round(JSON.stringify(D).length/1024)+' Ko</b></div>'
   +'</div></div>'
-  +'</div><div>'
-  +'<div class="bloc"><div class="bloc-tete"><h2>Paramètres</h2></div><div class="bloc-corps">'
-    +'<label class="champ">Jours travaillés</label>'
-    +'<div class="ligne" style="margin-top:4px">'
+  /* La destruction des donnees reste dans la section qui parle du fichier, mais
+     derriere sa propre bordure : on ne la croise pas par hasard en reglant autre chose. */
+  +'<div class="bloc" style="margin-top:18px;border-left:4px solid var(--rouge)">'
+    +'<div class="bloc-tete"><h2>Tout effacer</h2></div><div class="bloc-corps">'
+    +'<p style="margin:0 0 10px;font-size:13.5px;color:var(--encre-2)">Efface les activités, les notes et le tampon local de ce navigateur. Les fichiers déjà exportés ne sont pas touchés.</p>'
+    +'<button class="b rouge" data-act="raz">Tout effacer</button>'
+  +'</div></div>';
+}
+
+/* ---- 2. Import et export : ce qui entre, ce qui sort ---- */
+function sectionEchanges(){
+  return '<div class="bloc"><div class="bloc-tete"><h2>Importer</h2></div><div class="bloc-corps">'
+    +'<div class="ligne">'
+      +'<button class="b creux" data-act="imp-xlsx">Importer des dossiers (Excel)</button>'
+    +'</div>'
+    +'<label class="champ" style="margin-top:10px">Gestionnaire retenu à l\'import'
+      +'<input type="text" id="gestFiltre" value="'+esc(D.parametres.gestionnaire||"")+'" placeholder="vide = toutes les lignes"></label>'
+    +'<div class="note-aide">Seules les lignes dont la colonne Gestionnaire correspond seront importées. '
+      +'Les colonnes lues se règlent dans Catégories, sur la catégorie marquée « import ».</div>'
+  +'</div></div>'
+  +'<div class="bloc" style="margin-top:18px"><div class="bloc-tete"><h2>Exporter</h2></div><div class="bloc-corps">'
+    +'<div class="ligne">'
+      +'<button class="b creux" data-act="exp-json">Exporter en JSON</button>'
+      +'<button class="b creux" data-act="exp-csv">Exporter les activités (CSV)</button>'
+      +'<button class="b creux" data-act="exp-csvn">Exporter les notes (CSV)</button>'
+      +'<button class="b creux" data-act="exp-csvd">Exporter le compteur de traitement (CSV)</button>'
+      +'<button class="b creux" data-act="exp-csva">Exporter les appels (CSV)</button>'
+      +'<button class="b creux" data-act="exp-csvv">Exporter les vérifications (CSV)</button>'
+    +'</div>'
+    +'<div class="ligne" style="margin-top:8px">'
+      +'<span class="puce-lbl">Période des CSV</span>'
+      +inDate('id="perDeb"',perDeb)
+      +'<span style="font-size:13px;color:var(--encre-2)">au</span>'
+      +inDate('id="perFin"',perFin)
+      +((perDeb||perFin)?'<button class="lien" data-act="per-raz">tout l\'historique</button>'
+        :'<span class="note-aide" style="margin:0">vide = tout l\'historique</span>')
+    +'</div>'
+    +'<div class="note-aide">Cette période ne vaut que pour les CSV. Celle du rapport se règle '
+      +'dans l\'onglet Rapport.</div>'
+  +'</div></div>';
+}
+
+/* ---- 3. Organisation : mon temps et mes rubriques ---- */
+function sectionOrganisation(){
+  var abs=(D.parametres.absences||[]).slice().sort();
+  return '<div class="bloc"><div class="bloc-tete"><h2>Jours travaillés</h2></div><div class="bloc-corps">'
+    +'<div class="ligne">'
       +["dim","lun","mar","mer","jeu","ven","sam"].map(function(j,i){
         var on=(D.parametres.jours_ouvres||[]).indexOf(i)!==-1;
         return '<label style="font-size:13px;display:flex;gap:4px;align-items:center;text-transform:capitalize">'
           +'<input type="checkbox" data-jour="'+i+'" '+(on?"checked":"")+'> '+j+'</label>';
       }).join("")
     +'</div>'
-    +'<hr class="sep">'
-    +'<div class="grille" style="margin-bottom:10px">'
-      +'<label class="champ">Nom de l\'application<input type="text" id="nomApp" value="'+esc(D.parametres.nom_app||NOM_DEFAUT)+'"></label>'
-      +'<label class="champ">Titre du compteur<input type="text" id="titreDt" value="'+esc(D.parametres.titre_compteur||"")+'"></label>'
-    +'</div>'
-    +'<div class="ligne" style="margin-bottom:8px">'
-      +'<label style="font-size:13.5px;display:flex;gap:6px;align-items:center">'
-        +'<input type="checkbox" id="modPerm" '+(D.parametres.mod_permanence!==false?"checked":"")+'> Assistance téléphonique</label>'
-      +'<label style="font-size:13.5px;display:flex;gap:6px;align-items:center">'
-        +'<input type="checkbox" id="modDt" '+(D.parametres.mod_compteur!==false?"checked":"")+'> Compteur de traitement</label>'
-      +'<label style="font-size:13.5px;display:flex;gap:6px;align-items:center">'
-        +'<input type="checkbox" id="modSplash" '+(D.parametres.splash!==false?"checked":"")+'> Animation d\'ouverture</label>'
-      +'<span class="note-aide" style="margin:0">blocs affichés sur l\'écran du jour</span>'
-    +'</div>'
-    +(function(){
-        if(!ORPHELINS.n) return "";
-        var l=Object.keys(ORPHELINS.cles);
-        return '<div class="bloc" style="margin:0 0 14px;border-left:4px solid var(--jaune)">'
-          +'<div class="bloc-corps"><div class="txt" style="font-size:14px;margin-bottom:4px"><b>'
-          +ORPHELINS.n+' fiche(s) portaient une catégorie inconnue au dernier chargement</b></div>'
-          +'<div class="note-aide" style="margin:0 0 8px">Ces clés ne correspondent à aucune catégorie du '
-          +'fichier — faute de frappe, majuscule, pluriel. Les fiches ont été rattachées à '
-          +esc(ORPHELINS.vers)+' faute de mieux. Corrigez la clé dans le JSON, ou créez la catégorie '
-          +'manquante, puis rechargez.</div>'
-          +'<div class="diag">'+l.map(function(k){
-              return '<div>'+esc(k)+'<b class="ko">'+ORPHELINS.cles[k]+'</b></div>';
-            }).join("")+'</div></div></div>';
-      })()
-    +(function(){
-        var inc=incoherences();
-        if(!inc.n) return "";
-        return '<div class="bloc" style="margin:0 0 14px;border-left:4px solid var(--rouge)">'
-          +'<div class="bloc-corps"><div class="txt" style="font-size:14px;margin-bottom:4px">'
-          +'<b>'+inc.n+' activité(s) portent un statut étranger à leur catégorie</b></div>'
-          +'<div class="note-aide" style="margin:0 0 8px">Ces fiches ont probablement changé de catégorie '
-          +'lors d\'un chargement de fichier antérieur à la version 3.1.0. Leur statut d\'origine est intact '
-          +'et permet de retrouver la bonne catégorie.</div>'
-          +inc.par.map(function(x){
-              var K=catParCle(x.cat);
-              return '<div class="note"><div class="h">'+esc(K?K.plur||K.lib:x.cat)+' \u00b7 '+x.total+' fiche(s)</div>'
-                +'<div class="txt" style="font-size:12.5px">'
-                +Object.keys(x.statuts).slice(0,6).map(function(k){ return esc(libStatut(k))+' ('+x.statuts[k]+')' }).join(", ")
-                +'</div></div>';
-            }).join("")
-          +'<div class="ligne" style="margin-top:8px">'
-            +'<button class="b mini" data-act="diag-rep">Proposer une correction</button></div>'
-          +'</div></div>';
-      })()
-    +'<div class="ligne" style="margin-bottom:12px">'
-      +'<button class="b" data-act="param">Configurer les catégories d\'activité</button>'
-      +'<span class="note-aide" style="margin:0">apparence, champs, statuts</span></div>'
-    +'<hr class="sep">'
-    +'<label class="champ">Format des dates et des heures'
-      +'<select id="fmtDate">'
-        +'<option value="auto"'+(fmtDate()==="auto"?" selected":"")+'>Celui du navigateur</option>'
-        +'<option value="fr"'+(fmtDate()==="fr"?" selected":"")+'>jj/mm/aaaa et 24 h</option>'
-      +'</select></label>'
-    +'<div class="note-aide">Un champ de date natif s\'affiche dans la langue du navigateur, '
-      +'pas dans celle de l\'application : sur un poste en anglais, la saisie se lit mm/jj/aaaa '
-      +'et 02:30 PM. Le second choix remplace ces champs par les nôtres — le calendrier du '
-      +'navigateur reste accessible par le bouton \u25a6 à côté de chaque date.</div>'
-    +'<hr class="sep">'
-    +'<label class="champ">Gestionnaire retenu à l\'import Excel'
-      +'<input type="text" id="gestFiltre" value="'+esc(D.parametres.gestionnaire||"")+'" placeholder="vide = toutes les lignes"></label>'
-    +'<div class="note-aide">Seules les lignes dont la colonne Gestionnaire correspond seront importées.</div>'
-    +'<hr class="sep">'
-    +'<label class="champ">Rubriques d\'activité</label>'
-    +'<div style="margin-top:4px">'
-    +(rubriques().length? rubriques().map(function(r,i,t){
-        return '<div class="item"><span class="ordre">'
-          +'<button class="fl" data-rubmv="'+esc(r.id)+'" data-sens="-1"'+(i===0?" disabled":"")+' title="Monter">\u25b2</button>'
-          +'<button class="fl" data-rubmv="'+esc(r.id)+'" data-sens="1"'+(i===t.length-1?" disabled":"")+' title="Descendre">\u25bc</button>'
-          +'</span>'
-          +'<input type="text" class="rub-nom" data-rubnom="'+esc(r.id)+'" value="'+esc(r.nom)+'"'
-            +' title="Nom de la rubrique">'
-          +'<select class="rub-fam" data-rubfam="'+esc(r.id)+'" title="Famille">'
-            +selOpts(FAMILLES,r.famille)+'</select>'
-          +'<select class="rub-auto" data-rubauto="'+esc(r.id)+'" title="Ce que cette rubrique récupère automatiquement">'
-            +selOpts(SOURCES_AUTO,r.auto||"")+'</select>'
-          +'<button class="sup" data-suprub="'+esc(r.id)+'">✕</button></div>';
-      }).join("") : '<div class="carte-vide">Aucune rubrique.</div>')
-    +'</div>'
-    +'<div class="ligne" style="margin-top:6px">'
-      +'<input type="text" id="rubNom" placeholder="Nouvelle rubrique…" style="flex:1;min-width:140px">'
-      +'<select id="rubFam">'+selOpts(FAMILLES,"support")+'</select>'
-      +'<select id="rubAuto" title="Récupération automatique">'+selOpts(SOURCES_AUTO,"")+'</select>'
-      +'<button class="b mini creux" data-act="rub-add">Ajouter</button></div>'
-    +'<div class="note-aide">Les flèches fixent l\'ordre d\'affichage, partout où les rubriques sont proposées. '
-      +'Les rubriques servent à rattacher les notes qui ne relèvent d\'aucun dossier daté. Une note rattachée à rien n\'apparaît nulle part : le Journal les regroupe dans un bloc « Notes sans rattachement », avec de quoi les ranger. '
-      +'Nom, famille et récupération automatique se modifient directement dans la liste : une rubrique n\'a jamais besoin d\'être supprimée pour être corrigée — et la supprimer détacherait ses notes sans retour. La récupération vaut le chrono du compteur ou la durée des appels ; une même source ne peut appartenir qu\'à une rubrique.</div>'
     +'<hr class="sep">'
     +'<label class="champ">Absences (congés, formations)</label>'
     +'<div class="ligne" style="margin-top:4px">'+inDate('id="absDate"',"")+'<button class="b mini" data-act="abs-add">Ajouter</button></div>'
@@ -5461,7 +5434,50 @@ function vueDonnees(){
       }).join(""):'<span class="note-aide">Aucune absence enregistrée.</span>')
     +'</div>'
     +'<div class="note-aide">Les week-ends, jours fériés et absences sont exclus du calcul du prochain jour ouvré.</div>'
-    +'<hr class="sep">'
+  +'</div></div>'
+  +'<div class="bloc" style="margin-top:18px"><div class="bloc-tete"><h2>Rubriques d\'activité</h2></div><div class="bloc-corps">'
+    +(rubriques().length? rubriques().map(function(r,i,t){
+        return '<div class="item"><span class="ordre">'
+          +'<button class="fl" data-rubmv="'+esc(r.id)+'" data-sens="-1"'+(i===0?" disabled":"")+' title="Monter">▲</button>'
+          +'<button class="fl" data-rubmv="'+esc(r.id)+'" data-sens="1"'+(i===t.length-1?" disabled":"")+' title="Descendre">▼</button>'
+          +'</span>'
+          +'<input type="text" class="rub-nom" data-rubnom="'+esc(r.id)+'" value="'+esc(r.nom)+'"'
+            +' title="Nom de la rubrique">'
+          +'<select class="rub-fam" data-rubfam="'+esc(r.id)+'" title="Famille">'
+            +selOpts(FAMILLES,r.famille)+'</select>'
+          +'<select class="rub-auto" data-rubauto="'+esc(r.id)+'" title="Ce que cette rubrique récupère automatiquement">'
+            +selOpts(SOURCES_AUTO,r.auto||"")+'</select>'
+          +'<button class="sup" data-suprub="'+esc(r.id)+'">✕</button></div>';
+      }).join("") : '<div class="carte-vide">Aucune rubrique.</div>')
+    +'<div class="ligne" style="margin-top:6px">'
+      +'<input type="text" id="rubNom" placeholder="Nouvelle rubrique…" style="flex:1;min-width:140px">'
+      +'<select id="rubFam">'+selOpts(FAMILLES,"support")+'</select>'
+      +'<select id="rubAuto" title="Récupération automatique">'+selOpts(SOURCES_AUTO,"")+'</select>'
+      +'<button class="b mini creux" data-act="rub-add">Ajouter</button></div>'
+    +'<div class="note-aide">Les flèches fixent l\'ordre d\'affichage, partout où les rubriques sont proposées. '
+      +'Les rubriques servent à rattacher les notes qui ne relèvent d\'aucun dossier daté. Une note rattachée à rien n\'apparaît nulle part : le Journal les regroupe dans un bloc « Notes sans rattachement », avec de quoi les ranger. '
+      +'Nom, famille et récupération automatique se modifient directement dans la liste : une rubrique n\'a jamais besoin d\'être supprimée pour être corrigée — et la supprimer détacherait ses notes sans retour. La récupération vaut le chrono du compteur ou la durée des appels ; une même source ne peut appartenir qu\'à une rubrique.</div>'
+  +'</div></div>';
+}
+
+/* ---- 4. Categories ---- */
+function sectionCategories(){
+  return '<div class="bloc"><div class="bloc-tete"><h2>Catégories d\'activité</h2></div><div class="bloc-corps">'
+    +'<div class="ligne">'
+      +'<button class="b" data-act="param">Configurer les catégories d\'activité</button>'
+      +'<span class="note-aide" style="margin:0">apparence, champs, statuts, colonnes d\'import</span></div>'
+    +'<div class="note-aide" style="margin-top:10px">Une catégorie décrit une sorte d\'activité : ses champs, '
+      +'son cycle de vie, et la façon dont elle se lit dans un fichier Excel. Les valeurs proposées dans ses '
+      +'champs viennent des listes, dans la section voisine.</div>'
+  +'</div></div>';
+}
+
+/* ---- 5. Listes ---- */
+function sectionListes(){
+  return '<div class="bloc"><div class="bloc-tete"><h2>Listes de valeurs</h2></div><div class="bloc-corps">'
+    +'<div class="note-aide" style="margin:0 0 4px">Chaque liste est enregistrée dès que vous quittez le champ — '
+      +'inutile de valider. Elles sont aussi modifiables à la volée depuis les formulaires, via ＋ Ajouter à la liste.</div>'
+    +'<div class="grille-listes">'
     +[["types_evenement","Types d'événement (dates posées sur une activité)"],
       ["types_intervention","Types d'intervention (dossiers)"],
       ["motifs_appel","Motifs d'appel (assistance)"],
@@ -5478,16 +5494,110 @@ function vueDonnees(){
       ["types_relation","Types de relation (libellé|réciproque)"],
       ["types_note","Types de note (journal)"],
       ["ouvrages","Ouvrages"]].map(function(x){
-      return '<label class="champ" style="margin-top:10px">'+esc(x[1])+' — une valeur par ligne</label>'
-       +'<textarea data-liste-txt="'+x[0]+'" style="width:100%;min-height:96px;padding:8px;border:1px solid var(--trait);border-radius:2px;font-family:var(--data);font-size:13px">'
-       +esc((D.parametres[x[0]]||[]).join("\n"))+'</textarea>';
+      return '<div><label class="champ" style="margin-top:10px">'+esc(x[1])+' — une valeur par ligne</label>'
+       +'<textarea data-liste-txt="'+x[0]+'" style="width:100%;min-height:88px;padding:8px;border:1px solid var(--trait);border-radius:2px;font-family:var(--data);font-size:13px">'
+       +esc((D.parametres[x[0]]||[]).join("\n"))+'</textarea></div>';
     }).join("")
-    +'<div class="note-aide">Chaque liste est enregistrée dès que vous quittez le champ — inutile de valider. '
-      +'Elles sont aussi modifiables à la volée depuis les formulaires, via ＋ Ajouter à la liste.</div>'
+    +'</div>'
+  +'</div></div>';
+}
+
+/* ---- 6. Affichage ---- */
+function sectionAffichage(){
+  return '<div class="bloc"><div class="bloc-tete"><h2>Affichage</h2></div><div class="bloc-corps">'
+    +'<div class="grille" style="margin-bottom:10px">'
+      +'<label class="champ">Nom de l\'application<input type="text" id="nomApp" value="'+esc(D.parametres.nom_app||NOM_DEFAUT)+'"></label>'
+      +'<label class="champ">Titre du compteur<input type="text" id="titreDt" value="'+esc(D.parametres.titre_compteur||"")+'"></label>'
+    +'</div>'
+    +'<label class="champ">Format des dates et des heures'
+      +'<select id="fmtDate">'
+        +'<option value="auto"'+(fmtDate()==="auto"?" selected":"")+'>Celui du navigateur</option>'
+        +'<option value="fr"'+(fmtDate()==="fr"?" selected":"")+'>jj/mm/aaaa et 24 h</option>'
+      +'</select></label>'
+    +'<div class="note-aide">Un champ de date natif s\'affiche dans la langue du navigateur, '
+      +'pas dans celle de l\'application : sur un poste en anglais, la saisie se lit mm/jj/aaaa '
+      +'et 02:30 PM. Le second choix remplace ces champs par les nôtres — le calendrier du '
+      +'navigateur reste accessible par le bouton ▦ à côté de chaque date.</div>'
+    +'<hr class="sep">'
+    +'<label class="champ">Blocs affichés sur l\'écran du jour</label>'
+    +'<div class="ligne" style="margin-top:4px">'
+      +'<label style="font-size:13.5px;display:flex;gap:6px;align-items:center">'
+        +'<input type="checkbox" id="modPerm" '+(D.parametres.mod_permanence!==false?"checked":"")+'> Assistance téléphonique</label>'
+      +'<label style="font-size:13.5px;display:flex;gap:6px;align-items:center">'
+        +'<input type="checkbox" id="modDt" '+(D.parametres.mod_compteur!==false?"checked":"")+'> Compteur de traitement</label>'
+      +'<label style="font-size:13.5px;display:flex;gap:6px;align-items:center">'
+        +'<input type="checkbox" id="modSplash" '+(D.parametres.splash!==false?"checked":"")+'> Animation d\'ouverture</label>'
+    +'</div>'
+  +'</div></div>';
+}
+
+function vueDonnees(){
+  var corps = ongletOptions==="echanges" ? sectionEchanges()
+    : ongletOptions==="organisation" ? sectionOrganisation()
+    : ongletOptions==="categories" ? sectionCategories()
+    : ongletOptions==="listes" ? sectionListes()
+    : ongletOptions==="affichage" ? sectionAffichage()
+    : sectionFichier();
+  return (fichierCharge?"":'<div class="bloc" style="margin-bottom:18px;border-left:4px solid var(--rouge)">'+'<div class="bloc-corps"><div class="vide" style="padding:12px 8px">'+'<b>Commencez par ouvrir votre fichier de données</b>'+'Les autres onglets restent inaccessibles tant qu\'aucun fichier n\'est chargé, pour éviter de saisir dans le vide.</div>'+'<div class="ligne" style="justify-content:center">'+'<button class="b" data-act="lier">Ouvrir ou créer un fichier</button>'+'<button class="lien" data-act="sans-fichier">continuer sans fichier</button>'+'</div></div></div>')
+    +fragAlertesDonnees()
+    +fragSousOnglets()
+    +corps;
+}
+
+/* ============ Rapport : une production, pas un reglage ============
+   Le rapport, le compte-rendu et l'identite qui les signe vivaient dans « Fichier de
+   donnees », ou rien ne les appelait. Ce sont des choses qu'on produit — elles ont
+   leur onglet, au meme rang que le Journal. */
+function vueRapport(){
+  return '<div class="duo"><div>'
+  +'<div class="bloc"><div class="bloc-tete"><h2>Rapport d\'activité</h2></div><div class="bloc-corps">'
+    +'<div class="ligne">'
+      +'<span class="puce-lbl">Période</span>'
+      +inDate('id="rapDeb"',rapDeb||moisIso(0)[0])
+      +'<span style="font-size:13px;color:var(--encre-2)">au</span>'
+      +inDate('id="rapFin"',rapFin||moisIso(0)[1])
+    +'</div>'
+    +'<div class="ligne" style="margin-top:6px">'
+      +'<button class="lien" data-act="rap-mois">mois en cours</button>'
+      +'<button class="lien" data-act="rap-moisp">mois précédent</button>'
+      +'<button class="lien" data-act="rap-an">année en cours</button>'
+    +'</div>'
+    +'<div class="ligne" style="margin-top:10px">'
+      +'<button class="b" data-act="rapport-pdf">Rapport PDF</button>'
+      +'<button class="b creux" data-act="rapport">Rapport texte</button>'
+      +'<label style="font-size:13.5px;display:flex;gap:6px;align-items:center;margin-left:auto">'
+        +'<input type="checkbox" id="rapTxtOn" '+(rapTexte?"checked":"")+'> Inclure le détail en texte libre</label>'
+    +'</div>'
+    +'<div class="note-aide">Le rapport PDF s\'ouvre dans le dialogue d\'impression : choisissez '
+      +'« Enregistrer au format PDF » et décochez « En-têtes et pieds de page ».</div>'
+    +'<div class="note-aide">Sans le détail, le rapport ne contient que des volumes et des libellés '
+      +'issus de vos listes : ni nom, ni référence de dossier, ni référence technique. Avec le détail, vos saisies sont '
+      +'reprises telles quelles et doivent être relues avant diffusion.</div>'
   +'</div></div>'
-  +'<div class="bloc" style="margin-top:18px"><div class="bloc-tete"><h2>Réinitialisation</h2></div><div class="bloc-corps">'
-    +'<p style="margin:0 0 10px;font-size:13.5px;color:var(--encre-2)">Efface les activités, les notes et le tampon local de ce navigateur. Les fichiers déjà exportés ne sont pas touchés.</p>'
-    +'<button class="b rouge" data-act="raz">Tout effacer</button>'
+  +'<div class="bloc" style="margin-top:18px"><div class="bloc-tete"><h2>Compte-rendu du jour</h2></div><div class="bloc-corps">'
+    +'<div class="ligne">'
+      +'<span class="puce-lbl">Journée du</span>'
+      +inDate('id="expDate"',dateExport||auj())
+      +'<button class="b" data-act="cr">Établir le compte-rendu</button>'
+      +((dateExport&&dateExport!==auj())?'<button class="lien" data-act="cr-auj">revenir à aujourd\'hui</button>':"")
+    +'</div>'
+    +'<div class="note-aide">Reprend les activités, les notes et les appels de la journée, prêts à être '
+      +'recopiés ailleurs.</div>'
+  +'</div></div>'
+  +'</div><div>'
+  +'<div class="bloc"><div class="bloc-tete"><h2>Ce qui signe le rapport</h2></div><div class="bloc-corps">'
+    +'<div class="grille">'
+      +'<label class="champ">Nom affiché<input type="text" id="idNom" value="'+esc(D.parametres.id_nom||"")+'" placeholder="Prénom NOM"></label>'
+      +'<label class="champ">Fonction<input type="text" id="idFonc" value="'+esc(D.parametres.id_fonction||"")+'" placeholder="Votre fonction"></label>'
+      +'<label class="champ">Entité<input type="text" id="idEnt" value="'+esc(D.parametres.id_entite||"")+'" placeholder="Votre service"></label>'
+    +'</div>'
+    +'<label class="champ" style="margin-top:10px">Faits marquants — repris dans le rapport PDF'
+      +'<textarea id="rapFaits" style="width:100%;min-height:96px;padding:8px;border:1px solid var(--trait);border-radius:2px" '
+      +'placeholder="Ce que les chiffres ne disent pas : reprises de portefeuille, appuis apportés, initiatives…">'+esc(D.parametres.rap_faits||"")+'</textarea></label>'
+    +'<label class="champ" style="margin-top:8px">Objectifs et besoins'
+      +'<textarea id="rapObj" style="width:100%;min-height:80px;padding:8px;border:1px solid var(--trait);border-radius:2px" '
+      +'placeholder="Formations souhaitées, évolution de poste, moyens nécessaires…">'+esc(D.parametres.rap_objectifs||"")+'</textarea></label>'
+    +'<div class="note-aide">Ces trois champs et ces deux textes sont repris tels quels dans le rapport PDF.</div>'
   +'</div></div>'
   +'</div></div>';
 }
@@ -8255,6 +8365,7 @@ function rendre(){
   if(vueActive==="jour") m.innerHTML=vueJour();
   else if(vueActive==="suivant") m.innerHTML=vueSuivant();
   else if(vueActive==="calendrier") m.innerHTML=vueCalendrier();
+  else if(vueActive==="rapport") m.innerHTML=vueRapport();
   else if(vueActive==="projets") m.innerHTML=vueProjets();
   else if(vueActive==="chantiers") m.innerHTML=vueChantiers();
   else if(vueActive==="idees") m.innerHTML=vueIdees();
@@ -8310,6 +8421,7 @@ function ajouterNote(){
 }
 
 var JOURNAL_VERSIONS = [
+  ["1.5-public","<b>Options r\u00e9organis\u00e9e.</b> L\u2019\u00e9cran faisait pr\u00e8s de quatre \u00e9crans de haut pour quatre blocs, dont deux fourre-tout : \u00ab Fichier de donn\u00e9es \u00bb contenait le rapport, l\u2019identit\u00e9 et le compte-rendu, et deux s\u00e9lecteurs de p\u00e9riode y cohabitaient ; l\u2019import Excel \u00e9tait s\u00e9par\u00e9 de son propre r\u00e9glage par trois \u00e9crans. Six sections r\u00e9pondent d\u00e9sormais chacune \u00e0 une t\u00e2che \u2014 Fichier, Import et export, Organisation, Cat\u00e9gories, Listes, Affichage \u2014 et se choisissent par une rang\u00e9e d\u2019onglets. Le rapport, le compte-rendu et l\u2019identit\u00e9 qui les signe ne sont pas des r\u00e9glages mais des productions : ils ont leur propre onglet <b>Rapport</b>."],
   ["1.4-public","Le Journal regroupe les <b>notes sans rattachement</b> \u2014 ni activit\u00e9, ni rubrique \u2014 et permet de les ranger sur place. Elles n\u2019apparaissaient jusqu\u2019ici nulle part, tout en comptant dans les totaux. Supprimer une rubrique garde d\u00e9sormais la trace de ce \u00e0 quoi chaque note \u00e9tait rattach\u00e9e, si bien qu\u2019on sait d\u2019o\u00f9 elles viennent."],
   ["1.3-public","Une rubrique d\u2019activit\u00e9 se renomme et change de famille directement dans la liste. Jusqu\u2019ici elle ne pouvait qu\u2019\u00eatre ajout\u00e9e ou supprim\u00e9e : corriger une faute de frappe imposait de la d\u00e9truire et de la recr\u00e9er, donc de d\u00e9tacher toutes ses notes sans moyen de r\u00e9tablir le lien. Les notes pointent l\u2019identifiant de la rubrique, jamais son nom : renommer est sans effet sur elles."],
   ["1.2-public","Chaque rubrique dit maintenant ce qu\u2019elle r\u00e9cup\u00e8re automatiquement \u2014 le chrono du compteur, ou la dur\u00e9e des appels \u2014 et ce r\u00e9glage se change dans la liste. Il n\u2019\u00e9tait jusque-l\u00e0 r\u00e9glable nulle part : une rubrique recr\u00e9\u00e9e \u00e0 la main perdait d\u00e9finitivement cette r\u00e9cup\u00e9ration. Une m\u00eame source ne peut appartenir qu\u2019\u00e0 une rubrique, sans quoi son temps serait compt\u00e9 deux fois. Et supprimer une rubrique demande confirmation en annon\u00e7ant le nombre de notes qui seront d\u00e9tach\u00e9es \u2014 un lien qu\u2019on ne r\u00e9tablit pas."],
@@ -9786,6 +9898,7 @@ document.addEventListener("click",function(e){
     return;
   }
   if((el=t.closest("[data-fait]"))){ cloreSuite(el.dataset.fait); return }
+  if((el=t.closest("[data-sopt]"))){ ongletOptions=el.getAttribute("data-sopt"); rendre(); return }
   if((el=t.closest("[data-proj]"))){ editerChantier(el.getAttribute("data-proj")); return }
   if((el=t.closest("[data-jalon]"))){ basculerJalon(el.getAttribute("data-jalon")); return }
   if((el=t.closest("[data-fr-cal]"))){ ouvrirCalendrierFr(el); return }
@@ -10939,7 +11052,7 @@ var A = window.AIDE = [
 +'<p class="pa-astuce">Ce bloc et l’assistance téléphonique peuvent être désactivés dans les paramètres '
 +'si votre poste ne les utilise pas.</p>' },
 
-{ id:"rapport", titre:"Rapport d’activité", vues:[], html:
+{ id:"rapport", titre:"Rapport d’activité", vues:["rapport"], html:
  '<h4>À quoi il sert</h4>'
 +'<p>Produire, sur une période que vous choisissez, un document présentable en entretien. '
 +'Il ne contient <b>aucune donnée nominative ni référence de dossier</b>.</p>'
@@ -10966,8 +11079,16 @@ var A = window.AIDE = [
 +'<p><b>Faits marquants</b> et <b>Objectifs et besoins</b> se renseignent dans Options. Ce sont les seules '
 +'sections rédigées, et ce sont elles qu’on lit en premier : les chiffres ne font que les étayer.</p>' },
 
-{ id:"donnees", titre:"Options, fichier et exports", vues:["donnees"], html:
- '<h4>Le fichier</h4>'
+{ id:"donnees", titre:"Options", vues:["donnees"], html:
+ '<h4>Six sections, une tâche chacune</h4>'
++'<dl><dt>Fichier</dt><dd>Où vivent vos données, l’état du poste, et l’effacement complet.</dd>'
++'<dt>Import et export</dt><dd>Ce qui entre depuis Excel, ce qui sort en CSV ou en JSON.</dd>'
++'<dt>Organisation</dt><dd>Vos jours travaillés, vos absences, vos rubriques d’activité.</dd>'
++'<dt>Catégories</dt><dd>Les sortes d’activités : leurs champs, leurs statuts, leurs colonnes d’import.</dd>'
++'<dt>Listes</dt><dd>Les valeurs proposées dans les champs.</dd>'
++'<dt>Affichage</dt><dd>Nom de l’application, format des dates, blocs de l’écran du jour.</dd></dl>'
++'<p>Le rapport, le compte-rendu et l’identité qui les signe ne sont pas des réglages : ils ont leur propre onglet <b>Rapport</b>.</p>'
++'<h4>Le fichier</h4>'
 +'<p>« Lier un fichier » ou « Ouvrir un fichier » : après ce clic unique, tout s’enregistre seul. '
 +'L’état en haut à droite indique où en est l’enregistrement.</p>'
 +'<p class="pa-astuce">Le tampon du navigateur n’est qu’un relais de session. Si votre poste le vide '

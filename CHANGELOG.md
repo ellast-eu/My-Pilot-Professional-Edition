@@ -3,6 +3,10 @@
 Copie du journal intégré à l'application (**À propos → Journal des versions**).
 La version faisant foi est celle du code.
 
+## 1.5-public
+
+<b>Options réorganisée.</b> L’écran faisait près de quatre écrans de haut pour quatre blocs, dont deux fourre-tout : « Fichier de données » contenait le rapport, l’identité et le compte-rendu, et deux sélecteurs de période y cohabitaient ; l’import Excel était séparé de son propre réglage par trois écrans. Six sections répondent désormais chacune à une tâche — Fichier, Import et export, Organisation, Catégories, Listes, Affichage — et se choisissent par une rangée d’onglets. Le rapport, le compte-rendu et l’identité qui les signe ne sont pas des réglages mais des productions : ils ont leur propre onglet <b>Rapport</b>.
+
 ## 1.4-public
 
 Le Journal regroupe les <b>notes sans rattachement</b> — ni activité, ni rubrique — et permet de les ranger sur place. Elles n’apparaissaient jusqu’ici nulle part, tout en comptant dans les totaux. Supprimer une rubrique garde désormais la trace de ce à quoi chaque note était rattachée, si bien qu’on sait d’où elles viennent.

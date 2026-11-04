@@ -28,7 +28,8 @@ const J=n=>{const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().s
      rubrique_id:'r-traitement',contenu:'Une note',duree:15,suite:null},
             {id:'n2',date:j[0],heure:'10:00',type:'',chantier_id:'',
      rubrique_id:'r-traitement',contenu:'Une autre',duree:5,suite:null}];
-   D=normaliser(D); vueActive='donnees'; rendre();
+   /* v1.5 : les rubriques vivent dans la section Organisation. */
+   D=normaliser(D); vueActive='donnees'; ongletOptions='organisation'; rendre();
  },{j:{0:J(0)}});
  const sources=()=>p.evaluate(()=>rubriques().map(r=>r.nom+':'+(r.auto||'—')).join(', '));
 

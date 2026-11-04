@@ -39,7 +39,7 @@ const J=n=>{const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().s
  T('tout est rattaché : aucun bloc', (await bloc())===null);
 
  /* --- le scénario de Stella : supprimer la rubrique ----------------------- */
- await p.evaluate(()=>{ vueActive='donnees'; rendre() }); await p.waitForTimeout(350);
+ await p.evaluate(()=>{ vueActive='donnees'; ongletOptions='organisation'; rendre() }); await p.waitForTimeout(350);
  await p.click('[data-suprub="r-traitement"]'); await p.waitForTimeout(450);
  await p.evaluate(()=>{ vueActive='journal'; rendre() }); await p.waitForTimeout(450);
 
