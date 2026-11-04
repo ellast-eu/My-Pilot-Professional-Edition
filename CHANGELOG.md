@@ -3,6 +3,10 @@
 Copie du journal intégré à l'application (**À propos → Journal des versions**).
 La version faisant foi est celle du code.
 
+## 1.2-public
+
+Chaque rubrique dit maintenant ce qu’elle récupère automatiquement — le chrono du compteur, ou la durée des appels — et ce réglage se change dans la liste. Il n’était jusque-là réglable nulle part : une rubrique recréée à la main perdait définitivement cette récupération. Une même source ne peut appartenir qu’à une rubrique, sans quoi son temps serait compté deux fois. Et supprimer une rubrique demande confirmation en annonçant le nombre de notes qui seront détachées — un lien qu’on ne rétablit pas.
+
 ## 1.1-public
 
 Les champs d’une catégorie se réagencent : tirez une ligne par sa poignée, ou utilisez les flèches. L’ordre de la fenêtre est celui de la fiche. Un champ ajouté et pas encore nommé survit au déplacement, et les saisies en cours ne sont pas perdues.

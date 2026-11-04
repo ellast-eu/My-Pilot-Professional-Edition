@@ -764,6 +764,7 @@ tr.arch td b{font-weight:normal}
   cursor:pointer;font-size:13px;line-height:1;padding:4px 6px;color:var(--encre-2)}
 .fr-cal:hover{background:var(--beton-2)}
 input.fr-faux{border-color:var(--rouge);background:rgba(200,30,30,.06)}
+.rub-auto{font-size:12px;max-width:170px}
 .chp-rang{position:relative}
 .chp-poing{border:1px solid var(--trait);background:var(--papier);color:var(--encre-3);
   touch-action:none;
@@ -839,7 +840,7 @@ hr.sep{border:0;border-top:1px solid var(--trait);margin:18px 0}
 "use strict";
 
 /* ================= etat ================= */
-var APP_VERSION = "1.1-public";
+var APP_VERSION = "1.2-public";
 
 /* ============================================================
    NOM DU POSTE — a modifier ici lors du deploiement sur un
@@ -1585,9 +1586,26 @@ function minutesAuto(r,jours){
   else if(r.auto==="appels") (D.appels||[]).forEach(function(a){ if(jours.indexOf(a.date)!==-1) t+=+a.duree||0 });
   return t;
 }
+/* Ce qu'une rubrique peut recuperer toute seule. Une source n'appartient qu'a une
+   rubrique a la fois : branchee deux fois, elle compterait deux fois. */
+var SOURCES_AUTO=[["","— aucune —"],["compteur","Chrono du compteur"],["appels","Durée des appels"]];
+function libSourceAuto(a){
+  var t=""; SOURCES_AUTO.forEach(function(x){ if(x[0]===a) t=x[1] }); return t;
+}
 function libAuto(r){
   if(!r) return "";
   return r.auto==="compteur" ? "chrono" : (r.auto==="appels" ? "appels" : "");
+}
+/* Poser une source la retire de la rubrique qui la portait : deux rubriques sur le
+   meme flux compteraient chacune la totalite, et le total du jour serait faux sans
+   que rien ne le signale. */
+function poserSourceAuto(rid,src){
+  var avant="";
+  rubriques().forEach(function(r){
+    if(src && r.auto===src && r.id!==rid){ avant=r.nom; r.auto="" }
+  });
+  rubriques().forEach(function(r){ if(r.id===rid) r.auto=src });
+  return avant;
 }
 function minutesRubrique(rid,jours){
   var t=0;
@@ -5353,18 +5371,20 @@ function vueDonnees(){
           +'<button class="fl" data-rubmv="'+esc(r.id)+'" data-sens="-1"'+(i===0?" disabled":"")+' title="Monter">\u25b2</button>'
           +'<button class="fl" data-rubmv="'+esc(r.id)+'" data-sens="1"'+(i===t.length-1?" disabled":"")+' title="Descendre">\u25bc</button>'
           +'</span><span class="txt">'+esc(r.nom)
-          +' <span class="etiq gris">'+esc(libFamille(r.famille))+'</span>'
-          +(r.auto==="compteur"?' <span class="etiq">chrono auto</span>':"")+'</span>'
+          +' <span class="etiq gris">'+esc(libFamille(r.famille))+'</span></span>'
+          +'<select class="rub-auto" data-rubauto="'+esc(r.id)+'" title="Ce que cette rubrique récupère automatiquement">'
+            +selOpts(SOURCES_AUTO,r.auto||"")+'</select>'
           +'<button class="sup" data-suprub="'+esc(r.id)+'">✕</button></div>';
       }).join("") : '<div class="carte-vide">Aucune rubrique.</div>')
     +'</div>'
     +'<div class="ligne" style="margin-top:6px">'
       +'<input type="text" id="rubNom" placeholder="Nouvelle rubrique…" style="flex:1;min-width:140px">'
       +'<select id="rubFam">'+selOpts(FAMILLES,"support")+'</select>'
+      +'<select id="rubAuto" title="Récupération automatique">'+selOpts(SOURCES_AUTO,"")+'</select>'
       +'<button class="b mini creux" data-act="rub-add">Ajouter</button></div>'
     +'<div class="note-aide">Les flèches fixent l\'ordre d\'affichage, partout où les rubriques sont proposées. '
       +'Les rubriques servent à rattacher les notes qui ne relèvent d\'aucun dossier daté. '
-      +'La rubrique « Traitement en série » récupère automatiquement le temps chronométré des sessions.</div>'
+      +'La liste à droite de chaque rubrique dit ce qu\'elle récupère toute seule : le chrono du compteur, ou la durée des appels. Une même source ne peut appartenir qu\'à une rubrique.</div>'
     +'<hr class="sep">'
     +'<label class="champ">Absences (congés, formations)</label>'
     +'<div class="ligne" style="margin-top:4px">'+inDate('id="absDate"',"")+'<button class="b mini" data-act="abs-add">Ajouter</button></div>'
@@ -8223,6 +8243,7 @@ function ajouterNote(){
 }
 
 var JOURNAL_VERSIONS = [
+  ["1.2-public","Chaque rubrique dit maintenant ce qu\u2019elle r\u00e9cup\u00e8re automatiquement \u2014 le chrono du compteur, ou la dur\u00e9e des appels \u2014 et ce r\u00e9glage se change dans la liste. Il n\u2019\u00e9tait jusque-l\u00e0 r\u00e9glable nulle part : une rubrique recr\u00e9\u00e9e \u00e0 la main perdait d\u00e9finitivement cette r\u00e9cup\u00e9ration. Une m\u00eame source ne peut appartenir qu\u2019\u00e0 une rubrique, sans quoi son temps serait compt\u00e9 deux fois. Et supprimer une rubrique demande confirmation en annon\u00e7ant le nombre de notes qui seront d\u00e9tach\u00e9es \u2014 un lien qu\u2019on ne r\u00e9tablit pas."],
   ["1.1-public","Les champs d\u2019une cat\u00e9gorie se r\u00e9agencent : tirez une ligne par sa poign\u00e9e, ou utilisez les fl\u00e8ches. L\u2019ordre de la fen\u00eatre est celui de la fiche. Un champ ajout\u00e9 et pas encore nomm\u00e9 survit au d\u00e9placement, et les saisies en cours ne sont pas perdues."],
   ["1.0-public","Premi\u00e8re version publiable, sous licence libre. Tout le vocabulaire du logiciel est d\u00e9sormais g\u00e9n\u00e9rique, libell\u00e9s comme cl\u00e9s de donn\u00e9es : les deux rappels de permanence s\u2019appellent Rappel 1 et Rappel 2, la rubrique de comptage \u00ab Traitement en s\u00e9rie \u00bb, et le second identifiant d\u2019une activit\u00e9 \u00ab R\u00e9f\u00e9rence technique \u00bb. Rien dans l\u2019application ne suppose plus un domaine d\u2019activit\u00e9 particulier : ce qui est sp\u00e9cifique \u00e0 un usage se configure, et s\u2019importe depuis un fichier de configuration. Un fichier enregistr\u00e9 avant cette version se convertit une fois, avec l\u2019outil fourni \u00e0 part. La num\u00e9rotation repart \u00e0 1.0 ; les versions pr\u00e9c\u00e9dentes, d\u00e9sormais suffix\u00e9es -private, restent au journal."],
   ["3.39.0-private","Le logiciel passe sous licence libre : <b>GNU GPL v3 ou ult\u00e9rieure</b>, au lieu de \u00ab tous droits r\u00e9serv\u00e9s \u00bb. Vous pouvez le redistribuer et le modifier, \u00e0 condition d\u2019en faire autant pour vos versions. L\u2019avis de licence figure en t\u00eate du fichier : celui-ci \u00e9tant \u00e0 la fois le programme et son code source complet, le recevoir suffit \u00e0 disposer de la source."],
@@ -9880,6 +9901,18 @@ document.addEventListener("click",function(e){
   }
   if((el=t.closest("[data-suprub"+"]"))){
     var rid=el.dataset.suprub, n=0;
+    /* Compter AVANT d'effacer : le detachement est irreversible, remettre la rubrique
+       ensuite ne retablit pas le lien. Mieux vaut le dire avant qu'apres. */
+    var att=(D.notes||[]).filter(function(x){ return x.rubrique_id===rid }).length;
+    var src=rubriques().filter(function(r){ return r.id===rid && r.auto })[0];
+    if(att || src){
+      var msg="Supprimer cette rubrique ?";
+      if(att) msg+="\n\n"+att+" note(s) y sont rattachées. Elles seront détachées, et "
+        +"remettre la rubrique ensuite ne rétablira pas le lien.";
+      if(src) msg+="\n\nElle récupère « "+libSourceAuto(src.auto)+" ». "
+        +"Ce temps ne sera plus compté nulle part.";
+      if(!confirm(msg)) return;
+    }
     (D.notes||[]).forEach(function(x){ if(x.rubrique_id===rid){ x.rubrique_id=""; n++ } });
     D.parametres.rubriques=rubriques().filter(function(r){return r.id!==rid});
     modifie(); rendre();
@@ -10172,8 +10205,13 @@ document.addEventListener("click",function(e){
     }
     else if(a==="rub-add"){
       var rn=$("#rubNom").value.trim();
-      if(rn){ rubriques().push({id:uid(),nom:rn,famille:$("#rubFam").value,auto:""});
-        modifie(); rendre(); toast("Rubrique ajoutée") }
+      if(rn){
+        var src=$("#rubAuto")?$("#rubAuto").value:"";
+        rubriques().push({id:uid(),nom:rn,famille:$("#rubFam").value,auto:""});
+        if(src) poserSourceAuto(rubriques()[rubriques().length-1].id,src);
+        modifie(); rendre();
+        toast("Rubrique ajoutée"+(src?" — "+libSourceAuto(src):""));
+      }
     }
     else if(a==="abs-add"){
       var v=$("#absDate").value;
@@ -10271,6 +10309,13 @@ document.addEventListener("change",function(e){
   if(t.id==="modSplash"){
     D.parametres.splash=t.checked; modifie();
     if(t.checked){ toast("Animation activée — visible au prochain lancement") }
+    return;
+  }
+  if(t.hasAttribute && t.hasAttribute("data-rubauto")){
+    var pris=poserSourceAuto(t.getAttribute("data-rubauto"),t.value);
+    modifie(); rendre();
+    toast(t.value ? (libSourceAuto(t.value)+(pris?" — retirée de « "+pris+" »":""))
+                  : "Récupération automatique retirée");
     return;
   }
   if(t.id==="gestFiltre"){ D.parametres.gestionnaire=t.value.trim(); modifie(); toast("Filtre mis à jour"); return }

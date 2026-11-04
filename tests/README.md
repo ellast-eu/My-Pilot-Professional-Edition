@@ -48,6 +48,7 @@ nul si quelque chose a cassé. Les plus récentes :
 | `test57.js` | les messages sur le pilotage disent la même chose que la règle |
 | `test58.js` | suivi de projet : jalons cochés, avancement calculé, échéance justifiée |
 | `test60.js` | réagencer les champs d'une catégorie : flèches, glisser, défilement |
+| `test61.js` | source automatique d'une rubrique, unicité, et garde-fou à la suppression |
 | `test59.js` | le convertisseur de l'ancien format, et le rechargement du résultat |
 | `pagi5.js` | pagination du rapport imprimé, sous charge |
 | `mesure.js` | mise en page de la carte des idées à plusieurs largeurs |
