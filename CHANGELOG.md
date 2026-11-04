@@ -3,6 +3,10 @@
 Copie du journal intégré à l'application (**À propos → Journal des versions**).
 La version faisant foi est celle du code.
 
+## 1.1-public
+
+Les champs d’une catégorie se réagencent : tirez une ligne par sa poignée, ou utilisez les flèches. L’ordre de la fenêtre est celui de la fiche. Un champ ajouté et pas encore nommé survit au déplacement, et les saisies en cours ne sont pas perdues.
+
 ## 1.0-public
 
 Première version publiable, sous licence libre. Tout le vocabulaire du logiciel est désormais générique, libellés comme clés de données : les deux rappels de permanence s’appellent Rappel 1 et Rappel 2, la rubrique de comptage « Traitement en série », et le second identifiant d’une activité « Référence technique ». Rien dans l’application ne suppose plus un domaine d’activité particulier : ce qui est spécifique à un usage se configure, et s’importe depuis un fichier de configuration. Un fichier enregistré avant cette version se convertit une fois, avec l’outil fourni à part. La numérotation repart à 1.0 ; les versions précédentes, désormais suffixées -private, restent au journal.

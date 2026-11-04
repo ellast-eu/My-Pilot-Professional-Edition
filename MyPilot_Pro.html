@@ -764,6 +764,15 @@ tr.arch td b{font-weight:normal}
   cursor:pointer;font-size:13px;line-height:1;padding:4px 6px;color:var(--encre-2)}
 .fr-cal:hover{background:var(--beton-2)}
 input.fr-faux{border-color:var(--rouge);background:rgba(200,30,30,.06)}
+.chp-rang{position:relative}
+.chp-poing{border:1px solid var(--trait);background:var(--papier);color:var(--encre-3);
+  touch-action:none;
+  cursor:grab;font-size:13px;line-height:1;padding:5px 6px;border-radius:3px;flex:0 0 auto}
+.chp-poing:active{cursor:grabbing}
+.chp-poing:focus-visible{outline:2px solid var(--encre);outline-offset:1px}
+.chp-rang.chp-pris{opacity:.45}
+.chp-rang.chp-avant{box-shadow:0 -2px 0 0 var(--rouge)}
+.chp-rang.chp-apres{box-shadow:0 2px 0 0 var(--rouge)}
 .note-aide{font-size:12.5px;color:var(--encre-2);margin-top:6px}
 hr.sep{border:0;border-top:1px solid var(--trait);margin:18px 0}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
@@ -830,7 +839,7 @@ hr.sep{border:0;border-top:1px solid var(--trait);margin:18px 0}
 "use strict";
 
 /* ================= etat ================= */
-var APP_VERSION = "1.0-public";
+var APP_VERSION = "1.1-public";
 
 /* ============================================================
    NOM DU POSTE — a modifier ici lors du deploiement sur un
@@ -3406,6 +3415,86 @@ function armerChampsFr(racine){
   if(r.querySelectorAll) [].forEach.call(r.querySelectorAll("[data-fr]"),armerChampFr);
   if(r.nodeType===1 && r.hasAttribute && r.hasAttribute("data-fr")) armerChampFr(r);
 }
+/* Le glisser-deposer, en evenements POINTEUR et non en drag-and-drop HTML5.
+   Deux raisons, dans cet ordre : le DnD natif ne repond pas aux evenements souris
+   synthetiques, donc il serait impossible de le verifier autrement qu'a la main — et
+   un mecanisme qu'on ne peut pas eprouver n'a rien a faire ici ; et les evenements
+   pointeur fonctionnent aussi au doigt, ce que le DnD natif ne fait pas. */
+var chpPris=null, chpSurvole=null, chpXPos=0;
+function chpNettoyer(){
+  Array.prototype.forEach.call(document.querySelectorAll(".chp-rang"),function(r){
+    r.classList.remove("chp-avant","chp-apres","chp-pris");
+  });
+}
+function chpLigneSous(x,y){
+  var e=document.elementFromPoint(x,y);
+  return (e && e.closest) ? e.closest(".chp-rang") : null;
+}
+document.addEventListener("pointerdown",function(e){
+  var p=e.target.closest && e.target.closest("[data-chdrag]");
+  if(!p || e.button) return;
+  e.preventDefault();
+  chpPris=+p.dataset.chdrag; chpSurvole=chpPris;
+  var r=p.closest(".chp-rang"); if(r) r.classList.add("chp-pris");
+  try{ p.setPointerCapture(e.pointerId) }catch(x){}
+});
+/* Le defilement pendant le glisser. Sans lui, un champ ne peut aller que la ou on le
+   voit deja : avec vingt-deux champs, la liste depasse largement le cadre et le
+   glisser ne servirait presque a rien. On fait defiler des que le pointeur approche
+   d'un bord, d'autant plus vite qu'il en est pres. */
+var chpY=0, chpTic=null;
+function chpPas(){
+  var z=document.querySelector("#modCorps"); if(!z) return 0;
+  var b=z.getBoundingClientRect(), marge=48;
+  if(chpY < b.top+marge)      return -Math.min(22,Math.ceil((b.top+marge-chpY)/3));
+  if(chpY > b.bottom-marge)   return  Math.min(22,Math.ceil((chpY-(b.bottom-marge))/3));
+  return 0;
+}
+/* Le defilement tourne sur une horloge, pas sur les mouvements du pointeur : en
+   s'appuyant sur pointermove, il s'arretait des que le pointeur se posait au bord —
+   c'est-a-dire exactement quand on attend qu'il continue. */
+function chpDefiler(y){
+  chpY=y;
+  if(chpTic) return;
+  chpTic=setInterval(function(){
+    if(chpPris===null){ chpArreterDefilement(); return }
+    var z=document.querySelector("#modCorps"); if(!z) return;
+    var pas=chpPas(); if(!pas) return;
+    z.scrollTop+=pas;
+    /* La ligne survolee change sans que le pointeur bouge : on la recalcule. */
+    var r=chpLigneSous(chpXPos,chpY);
+    if(r){ var i=+r.dataset.chrow;
+      if(i!==chpSurvole){ chpSurvole=i; chpMarquer(r,i) } }
+  },16);
+}
+function chpArreterDefilement(){ if(chpTic){ clearInterval(chpTic); chpTic=null } }
+function chpMarquer(r,i){
+  chpNettoyer();
+  var src=document.querySelector('.chp-rang[data-chrow="'+chpPris+'"]');
+  if(src) src.classList.add("chp-pris");
+  if(i!==chpPris) r.classList.add(i<chpPris?"chp-avant":"chp-apres");
+}
+document.addEventListener("pointermove",function(e){
+  if(chpPris===null) return;
+  chpXPos=e.clientX;
+  chpDefiler(e.clientY);
+  var r=chpLigneSous(e.clientX,e.clientY);
+  if(!r) return;
+  var i=+r.dataset.chrow;
+  if(i===chpSurvole) return;
+  chpSurvole=i;
+  chpMarquer(r,i);
+});
+document.addEventListener("pointerup",function(e){
+  if(chpPris===null) return;
+  var de=chpPris, r=chpLigneSous(e.clientX,e.clientY);
+  chpPris=null; chpSurvole=null; chpArreterDefilement(); chpNettoyer();
+  if(r) deplacerChamp(de,+r.dataset.chrow);
+});
+document.addEventListener("pointercancel",function(){
+  chpPris=null; chpSurvole=null; chpArreterDefilement(); chpNettoyer();
+});
+
 function veillerChampsFr(){
   if(!window.MutationObserver) return;
   new MutationObserver(function(muts){
@@ -6133,15 +6222,51 @@ function editerCat(cle){
     {txt:"Enregistrer",classe:"",droite:true,fn:enregistrerCat}
   ]);
 }
+/* Comme lireChamps(), mais sans ecarter les lignes encore vides : on reagence ce qui
+   est a l'ecran, y compris un champ ajoute et pas encore nomme. */
+function champsBruts(K){
+  var out=[];
+  Array.prototype.forEach.call(document.querySelectorAll("#listeChamps .item"),function(row,i){
+    var o={cle:(K.champs[i]&&K.champs[i].cle)||"",lib:"",type:"texte",liste:"",groupe:"",col:0};
+    Array.prototype.forEach.call(row.querySelectorAll("[data-k]"),function(e){ o[e.dataset.k]=e.value });
+    o.col=+o.col||0;
+    out.push(o);
+  });
+  return out;
+}
+/* « vers » est la position FINALE voulue. On relit l'ecran avant de bouger, sinon une
+   saisie en cours serait perdue par le redessin. */
+function deplacerChamp(de,vers){
+  var K=catParCle(catEdit); if(!K) return;
+  var l=champsBruts(K);
+  if(de<0 || de>=l.length) return;
+  vers=Math.max(0,Math.min(vers,l.length-1));
+  if(de===vers) return;
+  var f=l.splice(de,1)[0];
+  l.splice(vers,0,f);
+  K.champs=l;
+  var z=$("#listeChamps"); if(!z) return;
+  z.innerHTML=fragChamps(K);
+  /* On rend le focus a la poignee du champ deplace : sans cela, enchainer deux
+     deplacements au clavier obligerait a retrouver la ligne des yeux. */
+  var p=z.querySelector('[data-chdrag="'+vers+'"]'); if(p) p.focus();
+}
 function fragChamps(K){
   if(!K.champs.length) return '<div class="carte-vide">Aucun champ propre. Les champs communs suffisent peut-être.</div>';
+  var n=K.champs.length;
   return K.champs.map(function(f,i){
-    return '<div class="item" style="align-items:flex-start;flex-wrap:wrap;gap:6px">'
+    return '<div class="item chp-rang" data-chrow="'+i+'" style="align-items:flex-start;flex-wrap:wrap;gap:6px">'
+      +'<button class="chp-poing" data-chdrag="'+i+'" title="Glisser pour déplacer"'
+        +' aria-label="Déplacer « '+esc(f.lib||"sans libellé")+' », position '+(i+1)+' sur '+n+'">⠿</button>'
       +'<input type="text" data-ch="'+i+'" data-k="lib" value="'+esc(f.lib)+'" placeholder="Libellé" style="flex:2;min-width:130px">'
       +'<select data-ch="'+i+'" data-k="type" style="flex:0 1 130px">'+selOpts(TYPES_CHAMP,f.type)+'</select>'
       +'<select data-ch="'+i+'" data-k="liste" style="flex:0 1 130px"><option value="">— liste —</option>'+selOpts(listesDispo(),f.liste)+'</select>'
       +'<input type="text" data-ch="'+i+'" data-k="groupe" value="'+esc(f.groupe)+'" placeholder="Groupe" style="flex:0 1 110px">'
       +'<input type="number" data-ch="'+i+'" data-k="col" value="'+esc(f.col||"")+'" placeholder="col." min="0" style="flex:0 1 70px" title="Colonne Excel à l\'import">'
+      +'<span class="ordre">'
+        +'<button class="fl" data-chmv="'+i+'" data-sens="-1"'+(i===0?" disabled":"")+' title="Monter">▲</button>'
+        +'<button class="fl" data-chmv="'+i+'" data-sens="1"'+(i===n-1?" disabled":"")+' title="Descendre">▼</button>'
+      +'</span>'
       +'<button class="sup" data-chsup="'+i+'" title="Retirer">✕</button>'
       +'</div>';
   }).join("");
@@ -8098,6 +8223,7 @@ function ajouterNote(){
 }
 
 var JOURNAL_VERSIONS = [
+  ["1.1-public","Les champs d\u2019une cat\u00e9gorie se r\u00e9agencent : tirez une ligne par sa poign\u00e9e, ou utilisez les fl\u00e8ches. L\u2019ordre de la fen\u00eatre est celui de la fiche. Un champ ajout\u00e9 et pas encore nomm\u00e9 survit au d\u00e9placement, et les saisies en cours ne sont pas perdues."],
   ["1.0-public","Premi\u00e8re version publiable, sous licence libre. Tout le vocabulaire du logiciel est d\u00e9sormais g\u00e9n\u00e9rique, libell\u00e9s comme cl\u00e9s de donn\u00e9es : les deux rappels de permanence s\u2019appellent Rappel 1 et Rappel 2, la rubrique de comptage \u00ab Traitement en s\u00e9rie \u00bb, et le second identifiant d\u2019une activit\u00e9 \u00ab R\u00e9f\u00e9rence technique \u00bb. Rien dans l\u2019application ne suppose plus un domaine d\u2019activit\u00e9 particulier : ce qui est sp\u00e9cifique \u00e0 un usage se configure, et s\u2019importe depuis un fichier de configuration. Un fichier enregistr\u00e9 avant cette version se convertit une fois, avec l\u2019outil fourni \u00e0 part. La num\u00e9rotation repart \u00e0 1.0 ; les versions pr\u00e9c\u00e9dentes, d\u00e9sormais suffix\u00e9es -private, restent au journal."],
   ["3.39.0-private","Le logiciel passe sous licence libre : <b>GNU GPL v3 ou ult\u00e9rieure</b>, au lieu de \u00ab tous droits r\u00e9serv\u00e9s \u00bb. Vous pouvez le redistribuer et le modifier, \u00e0 condition d\u2019en faire autant pour vos versions. L\u2019avis de licence figure en t\u00eate du fichier : celui-ci \u00e9tant \u00e0 la fois le programme et son code source complet, le recevoir suffit \u00e0 disposer de la source."],
   ["3.38.0-private","Suivi de projet, d\u00e9sactiv\u00e9 par d\u00e9faut : une activit\u00e9 devient un projet quand on l\u2019active. Elle gagne une \u00e9ch\u00e9ance qui ne se d\u00e9place pas sans motif \u2014 l\u2019\u00e9ch\u00e9ance d\u2019origine reste affich\u00e9e barr\u00e9e, avec le nombre de reports et leur historique \u2014 et des jalons choisis parmi ses \u00e9v\u00e9nements et ses t\u00e2ches. L\u2019avancement est calcul\u00e9 sur les jalons valid\u00e9s, jamais saisi. Nouvel onglet Projets, une ligne par projet, et un bloc \u00ab Projets \u00e0 surveiller \u00bb sur l\u2019\u00e9cran du jour."],
@@ -9632,6 +9758,9 @@ document.addEventListener("click",function(e){
     if(j>0){ var tmp=l[j-1]; l[j-1]=l[j]; l[j]=tmp; modifie(); rendre() }
     return;
   }
+  if((el=t.closest("[data-chmv]"))){
+    var ic=+el.dataset.chmv; deplacerChamp(ic,ic+(+el.dataset.sens)); return;
+  }
   if((el=t.closest("[data-chsup]"))){
     var Ks=catParCle(catEdit);
     if(Ks){ lireChamps(); Ks.champs.splice(+el.dataset.chsup,1); $("#listeChamps").innerHTML=fragChamps(Ks) }
@@ -10720,6 +10849,7 @@ var A = window.AIDE = [
 +'<p>Entièrement configurables : libellé, pluriel, symbole, couleur, champs propres, jeu de statuts, '
 +'statut de clôture. Une catégorie peut recevoir l’import Excel et déclarer ce que contient son champ '
 +'interlocuteur — une personne, une organisation, ou les deux. Ce réglage alimente la détection d’organisations.</p>'
++'<p><b>L’ordre des champs propres</b> dans la fenêtre de la catégorie est celui de la fiche. Pour le changer, tirez une ligne par sa poignée ⠿, ou servez-vous des flèches ▲▼, qui fonctionnent aussi au clavier et gardent le focus sur le champ déplacé.</p>'
 +'<p>Les catégories s’exportent et s’importent : c’est ce qui permet de reprendre la même configuration '
 +'sur un autre poste.</p>'
 +'<h4>Listes</h4>'

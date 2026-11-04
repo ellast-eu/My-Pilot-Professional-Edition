@@ -1,0 +1,40 @@
+# ─── Données ───────────────────────────────────────────────────────────────
+# Le fichier de travail ne doit jamais partir sur le dépôt : il contient des
+# dossiers réels, des contacts et des numéros de téléphone.
+mypilot-pro-data*.json
+*-data.json
+mypilot-pro-config-*.json
+mypilot-pro-compte-rendu-*.txt
+cr-*.txt
+exports/
+sauvegardes/
+
+# ─── Configuration ──────────────────────────────────────────────────
+# Une configuration de catégories réelle vit hors du code (voir le README).
+mypilot-pro-config.json
+config-*.json
+
+# ─── Sorties de test ───────────────────────────────────────────────────────
+tests/*.png
+tests/*.pdf
+node_modules
+node_modules/
+package-lock.json
+
+# ─── Système ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*~
+*.swp
+
+# banc local, dépend d'une configuration non versionnée
+tests/testconfig.js
+
+# Conversion d'un fichier d'avant la v1.0 : utile à une seule personne, et le seul
+# endroit où les anciennes clés devaient encore être nommées. Hors dépôt.
+outils/
+tests/test59.js
+
+# modules de pause : contenu personnel, hors dépôt
+module/
+modules/
