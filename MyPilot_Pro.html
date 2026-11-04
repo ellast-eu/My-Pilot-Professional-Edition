@@ -210,7 +210,6 @@ nav::-webkit-scrollbar-thumb{background:#4A514C}
   .etat{flex-wrap:wrap;row-gap:6px}
   .etat-txt{min-width:0}
   .cd-pause{min-width:0}
-  nav button{padding:8px 10px;font-size:12.5px}
 }
 
 nav{display:flex;gap:2px;padding:0 12px;overflow-x:auto}
@@ -218,12 +217,18 @@ nav button{
   appearance:none;background:transparent;border:0;color:#9AA09B;cursor:pointer;
   font-family:var(--display);font-variation-settings:"wght" 600,"wdth" 87.5;
   font-size:13.5px;letter-spacing:.08em;text-transform:uppercase;
-  padding:9px 14px;border-bottom:3px solid transparent;margin-bottom:-3px;white-space:nowrap;
+  padding:9px 14px;border-bottom:3px solid transparent;white-space:nowrap;
 }
 nav button:hover{color:#F2F3F1}
 nav button.bloque{opacity:.35;cursor:not-allowed}
 nav button.bloque:hover{color:#9AA09B}
-nav button[aria-current="true"]{color:#fff;border-bottom-color:var(--rouge)}
+nav button[aria-current="true"]{color:#fff;border-bottom-color:#fff}
+/* Ces deux reglages etaient ecrits AVANT la regle de base « nav button » : a
+   specificite egale la derniere l'emporte, ils ne s'appliquaient donc jamais.
+   Places ici, ils reprennent effet — c'est ce qui fait tenir la rangee sur un
+   ecran en portrait. */
+@media (max-width:1180px){ nav button{padding:9px 10px;letter-spacing:.06em} }
+@media (max-width:640px){ nav button{padding:8px 9px;font-size:12.5px} }
 
 /* ---------- structure ---------- */
 main{max-width:1240px;margin:0 auto;padding:20px 18px 80px}
@@ -395,8 +400,11 @@ td .ref{font-family:var(--data);font-size:11px;color:var(--encre-3);margin-top:1
 .cd-pause:hover{color:#fff;border-bottom-color:#8C938E}
 .cd-pause.proche{color:#FFD466}
 .cd-pause:empty{display:none}
-#btnPause,#btnAide,#btnApropos,#btnAccomp{border-color:#4A514C;color:#C9CFC9;background:transparent}
-#btnPause:hover,#btnAide:hover,#btnApropos:hover,#btnAccomp:hover{border-color:#8C938E;color:#fff;opacity:1}
+#btnPause,#btnAide,#btnApropos,#btnAccomp,#btnOptions{border-color:#4A514C;color:#C9CFC9;background:transparent}
+#btnPause:hover,#btnAide:hover,#btnApropos:hover,#btnAccomp:hover,#btnOptions:hover{border-color:#8C938E;color:#fff;opacity:1}
+/* Options n'est pas une action mais une vue : seul bouton du bandeau a mener
+   quelque part, il doit dire quand on y est, sans quoi on le cliquerait deux fois. */
+#btnOptions[aria-current="true"]{border-color:var(--rouge);color:#fff;background:rgba(216,35,42,.2)}
 /* les trois boutons forment un bloc : en fenetre etroite ils passent a la ligne ensemble,
    au lieu de laisser Pause seule en bas */
 .etat-btns{display:flex;align-items:center;gap:8px;flex:none;margin-right:2px}
@@ -813,6 +821,8 @@ hr.sep{border:0;border-top:1px solid var(--trait);margin:18px 0}
         <button class="b mini creux" id="btnApropos" title="À propos de l’application"
           ><span class="ap-long">À propos</span><span class="ap-court">Infos</span></button>
         <button class="b mini creux" id="btnAide" title="Aide (F1)">Aide</button>
+        <button class="b mini creux" id="btnOptions" data-vue="donnees"
+          title="Options et réglages">Options</button>
         <button class="b mini creux" id="btnAccomp" title="Mettre un accompagnement en fond"
           ><span class="ap-long">Accompagnement</span><span class="ap-court">Fond</span></button>
         <button class="b mini creux" id="btnPause">Pause</button>
@@ -830,7 +840,6 @@ hr.sep{border:0;border-top:1px solid var(--trait);margin:18px 0}
     <button data-vue="journal">Journal</button>
     <button data-vue="contacts">Contacts</button>
     <button data-vue="rapport">Rapport</button>
-    <button data-vue="donnees">Options</button>
   </nav>
 </header>
 
@@ -854,7 +863,7 @@ hr.sep{border:0;border-top:1px solid var(--trait);margin:18px 0}
 "use strict";
 
 /* ================= etat ================= */
-var APP_VERSION = "1.5-public";
+var APP_VERSION = "1.6-public";
 
 /* ============================================================
    NOM DU POSTE — a modifier ici lors du deploiement sur un
@@ -8255,7 +8264,7 @@ function construireRapportPDF(a,b){
   h+=rpPrevention(o);
   h+='<h2>Faits marquants</h2><p class="rp-i">Ce que les chiffres ne disent pas.</p>'
     +'<div class="rp-saisie'+(P.rap_faits?"":" vide")+'">'
-    +esc(P.rap_faits||"Section à renseigner dans l\u2019onglet Options.")+'</div>';
+    +esc(P.rap_faits||"Section à renseigner dans l\u2019onglet Rapport.")+'</div>';
   h+='<div style="break-inside:avoid;page-break-inside:avoid">';
   h+='<div class="rp-mention">Ce rapport est établi à partir des données saisies dans l\u2019outil de pilotage '
     +'d\u2019activité. Il ne contient aucune donnée nominative, aucune référence de dossier et aucun '
@@ -8314,7 +8323,7 @@ function construireRapportPDF(a,b){
   h+='<h2>Objectifs et besoins</h2>'
     +'<p class="rp-i">Ce que vous demandez pour tenir ce qui vient.</p>'
     +'<div class="rp-saisie'+(P.rap_objectifs?"":" vide")+'">'
-    +esc(P.rap_objectifs||"Section à renseigner dans l\u2019onglet Options.")+'</div>';
+    +esc(P.rap_objectifs||"Section à renseigner dans l\u2019onglet Rapport.")+'</div>';
   h+='<div class="rp-mention">Cette page décrit la charge déjà engagée au '+esc(libDate(auj()))
     +'. Elle ne préjuge ni des urgences à venir, ni du temps réellement nécessaire à chaque '
     +'élément.</div></div>';
@@ -8396,12 +8405,15 @@ function rendre(){
   majStyleCats();
   majCompteurPause();
   $("#dateJour").textContent=d.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
+  /* Sans fichier, la navigation entiere est fermee : Options est desormais dans le
+     bandeau, et reste la seule porte ouverte avec « Lier un fichier ». */
+  var surOptions = (vueActive==="donnees"||vueActive==="param");
   Array.prototype.forEach.call($("#nav").children,function(b){
-    var bloque = !fichierCharge && b.dataset.vue!=="donnees";
-    b.disabled=bloque;
-    b.classList.toggle("bloque",bloque);
-    b.setAttribute("aria-current", (b.dataset.vue===vueActive||(vueActive==="param"&&b.dataset.vue==="donnees"))?"true":"false");
+    b.disabled=!fichierCharge;
+    b.classList.toggle("bloque",!fichierCharge);
+    b.setAttribute("aria-current", b.dataset.vue===vueActive ? "true":"false");
   });
+  $("#btnOptions").setAttribute("aria-current", surOptions?"true":"false");
   majEtat();
 }
 function ajouterNote(){
@@ -8421,6 +8433,7 @@ function ajouterNote(){
 }
 
 var JOURNAL_VERSIONS = [
+  ["1.6-public","<b>Le bandeau accueille Options</b>, entre Aide et Accompagnement. La rang\u00e9e d\u2019onglets demandait 1188 px : sur un \u00e9cran en portrait elle d\u00e9bordait et le dernier onglet \u00e9tait coup\u00e9. Options n\u2019est pas un endroit o\u00f9 l\u2019on travaille mais le r\u00e9glage de l\u2019outil : sa place est aupr\u00e8s d\u2019Aide, d\u2019\u00c0 propos et de la Pause. Le bouton s\u2019allume quand on y est. <b>Le liseré de l\u2019onglet actif redevient visible</b> : il \u00e9tait rouge sur le trait rouge du bandeau, et d\u00e9bordait de surcro\u00eet d\u2019une zone que le navigateur d\u00e9coupe ; il est blanc, et interrompt le trait rouge \u00e0 l\u2019endroit o\u00f9 l\u2019on se trouve. Enfin, deux r\u00e9glages de largeur \u00e9crits avant la r\u00e8gle qu\u2019ils devaient corriger ne s\u2019appliquaient jamais : la rang\u00e9e se resserre d\u00e9sormais vraiment sur un \u00e9cran \u00e9troit."],
   ["1.5-public","<b>Options r\u00e9organis\u00e9e.</b> L\u2019\u00e9cran faisait pr\u00e8s de quatre \u00e9crans de haut pour quatre blocs, dont deux fourre-tout : \u00ab Fichier de donn\u00e9es \u00bb contenait le rapport, l\u2019identit\u00e9 et le compte-rendu, et deux s\u00e9lecteurs de p\u00e9riode y cohabitaient ; l\u2019import Excel \u00e9tait s\u00e9par\u00e9 de son propre r\u00e9glage par trois \u00e9crans. Six sections r\u00e9pondent d\u00e9sormais chacune \u00e0 une t\u00e2che \u2014 Fichier, Import et export, Organisation, Cat\u00e9gories, Listes, Affichage \u2014 et se choisissent par une rang\u00e9e d\u2019onglets. Le rapport, le compte-rendu et l\u2019identit\u00e9 qui les signe ne sont pas des r\u00e9glages mais des productions : ils ont leur propre onglet <b>Rapport</b>."],
   ["1.4-public","Le Journal regroupe les <b>notes sans rattachement</b> \u2014 ni activit\u00e9, ni rubrique \u2014 et permet de les ranger sur place. Elles n\u2019apparaissaient jusqu\u2019ici nulle part, tout en comptant dans les totaux. Supprimer une rubrique garde d\u00e9sormais la trace de ce \u00e0 quoi chaque note \u00e9tait rattach\u00e9e, si bien qu\u2019on sait d\u2019o\u00f9 elles viennent."],
   ["1.3-public","Une rubrique d\u2019activit\u00e9 se renomme et change de famille directement dans la liste. Jusqu\u2019ici elle ne pouvait qu\u2019\u00eatre ajout\u00e9e ou supprim\u00e9e : corriger une faute de frappe imposait de la d\u00e9truire et de la recr\u00e9er, donc de d\u00e9tacher toutes ses notes sans moyen de r\u00e9tablir le lien. Les notes pointent l\u2019identifiant de la rubrique, jamais son nom : renommer est sans effet sur elles."],
@@ -9791,7 +9804,7 @@ function convertirIdeeU(id,cle){
 /* ================= evenements ================= */
 document.addEventListener("click",function(e){
   var t=e.target,el;
-  if((el=t.closest("#nav button"))){ vueActive=el.dataset.vue; rendre(); return }
+  if((el=t.closest("#nav button,#btnOptions"))){ vueActive=el.dataset.vue; rendre(); return }
   if(t.id==="modX"){ if(quitterFicheAutorise()) fermerModale(); return }
   if(t.id==="cdPause"){
     if(proposerPause("pause demandée",(M.reglages.filtrer_duree!==false)?tempsDispo():null)){
@@ -10734,7 +10747,7 @@ var A = window.AIDE = [
 +'<dt>Options</dt><dd>Le fichier, les imports et exports, le rapport d’activité, les paramètres.</dd></dl>'
 +'<h4>Le fichier de données</h4>'
 +'<p>Tout vit dans un seul fichier, <code>mypilot-pro-data.json</code>, que vous choisissez au premier lancement. '
-+'Tant qu’il n’est pas lié, seul l’onglet Options est accessible : c’est volontaire, pour ne pas saisir dans le vide. '
++'Tant qu’il n’est pas lié, seul le bouton <b>Options</b> du bandeau est accessible : c’est volontaire, pour ne pas saisir dans le vide. '
 +'Une fois lié, chaque modification y est écrite toute seule, une seconde après la saisie.</p>'
 +'<p class="pa-astuce">L’application ne fait aucun appel réseau. Rien ne sort de votre poste, et elle fonctionne '
 +'sans connexion. C’est ce qui la rend utilisable sur un poste professionnel.</p>'

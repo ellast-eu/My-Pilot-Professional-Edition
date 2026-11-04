@@ -128,7 +128,11 @@ const APP='file://'+path.join(BAC,'MyPilot_Pro.html');
      long:e.querySelector('.ap-long').textContent, court:e.querySelector('.ap-court').textContent,
      couleur:getComputedStyle(e).color};
  });
- T('le bouton est entre Aide et Pause', h.ordre==='btnApropos,btnAide,btnAccomp,btnPause', h.ordre);
+ /* L'adjacence était trop stricte : la v1.6 a glissé Options entre Aide et
+    Accompagnement, ce qui ne change rien à la place d'Accompagnement. On vérifie
+    l'ORDRE — après Aide, avant Pause — qui est ce qui comptait. */
+ T('le bouton est dans le groupe, après Aide et avant Pause',
+   /btnAide,(btnOptions,)?btnAccomp,btnPause$/.test(h.ordre), h.ordre);
  T('  il est visible', h.visible);
  T('  avec un libellé court en réserve', h.long==='Accompagnement' && h.court==='Fond',
    h.long+'/'+h.court);

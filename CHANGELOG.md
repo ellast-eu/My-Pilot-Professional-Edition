@@ -3,6 +3,10 @@
 Copie du journal intégré à l'application (**À propos → Journal des versions**).
 La version faisant foi est celle du code.
 
+## 1.6-public
+
+<b>Le bandeau accueille Options</b>, entre Aide et Accompagnement. La rangée d’onglets demandait 1188 px : sur un écran en portrait elle débordait et le dernier onglet était coupé. Options n’est pas un endroit où l’on travaille mais le réglage de l’outil : sa place est auprès d’Aide, d’À propos et de la Pause. Le bouton s’allume quand on y est. <b>Le liseré de l’onglet actif redevient visible</b> : il était rouge sur le trait rouge du bandeau, et débordait de surcroît d’une zone que le navigateur découpe ; il est blanc, et interrompt le trait rouge à l’endroit où l’on se trouve. Enfin, deux réglages de largeur écrits avant la règle qu’ils devaient corriger ne s’appliquaient jamais : la rangée se resserre désormais vraiment sur un écran étroit.
+
 ## 1.5-public
 
 <b>Options réorganisée.</b> L’écran faisait près de quatre écrans de haut pour quatre blocs, dont deux fourre-tout : « Fichier de données » contenait le rapport, l’identité et le compte-rendu, et deux sélecteurs de période y cohabitaient ; l’import Excel était séparé de son propre réglage par trois écrans. Six sections répondent désormais chacune à une tâche — Fichier, Import et export, Organisation, Catégories, Listes, Affichage — et se choisissent par une rangée d’onglets. Le rapport, le compte-rendu et l’identité qui les signe ne sont pas des réglages mais des productions : ils ont leur propre onglet <b>Rapport</b>.

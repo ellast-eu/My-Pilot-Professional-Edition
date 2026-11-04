@@ -82,12 +82,14 @@ const CHAMPS=['autoEnr','perDeb','perFin','rapDeb','rapFin','rapTxtOn','idNom','
    trouve['rapDeb']==='rapport' && trouve['rapFin']==='rapport');
 
  /* --- 4. le rapport est devenu une production ----------------------------- */
- T('l’onglet Rapport existe, entre Contacts et Options',
-   await p.evaluate(()=>[...document.querySelectorAll('nav button[data-vue]')]
-     .map(x=>x.dataset.vue).join(',')).then?true:true);
+ /* Depuis la v1.6, Options a quitté la rangée pour le bandeau : Rapport la termine. */
  const nav=await p.evaluate(()=>[...document.querySelectorAll('nav button[data-vue]')]
    .map(x=>x.dataset.vue).join(','));
- T('  l’onglet Rapport est dans la navigation', /,rapport,donnees$/.test(nav), nav);
+ T('l’onglet Rapport termine la navigation, après Contacts',
+   /,contacts,rapport$/.test(nav), nav);
+ T('  Options n’y est plus, elle est dans le bandeau',
+   !/donnees/.test(nav) && await p.evaluate(()=>
+     !!document.querySelector('#btnOptions[data-vue="donnees"]')), nav);
  T('  il porte le rapport, le compte-rendu et l’identité',
    trouve['rapport-pdf']==='rapport' && trouve['cr']==='rapport'
    && trouve['idNom']==='rapport' && trouve['rapFaits']==='rapport',

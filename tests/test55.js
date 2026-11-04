@@ -26,10 +26,19 @@ const ok=[],ko=[]; const T=(n,c,d='')=>{(c?ok:ko).push(n+(d?' — '+d:''))};
  });
 
  /* --- 1. l'onglet s'appelle Options --------------------------------------- */
- const ong=await p.evaluate(()=>[...document.querySelectorAll('nav button[data-vue]')]
-   .map(x=>x.dataset.vue+':'+x.textContent).join(' · '));
- T('l’onglet Données s’appelle Options', /donnees:Options/.test(ong), ong);
+ /* Depuis la v1.6 Options n'est plus dans la rangée d'onglets mais dans le bandeau,
+    entre Aide et Accompagnement : la rangée débordait sur un écran en portrait, et
+    régler l'outil n'est pas un endroit où l'on travaille. La clé interne, elle, n'a
+    pas bougé — c'est tout l'intérêt de la tester ici. */
+ const ong=await p.evaluate(()=>{
+   const b=document.getElementById('btnOptions');
+   return b ? b.dataset.vue+':'+b.textContent : 'ABSENT';
+ });
+ T('Options s’appelle Options', /donnees:Options/.test(ong), ong);
  T('  la clé interne reste « donnees »', /donnees:/.test(ong));
+ T('  et elle n’est plus dans la rangée d’onglets',
+   await p.evaluate(()=>![...document.querySelectorAll('nav button[data-vue]')]
+     .some(x=>x.dataset.vue==='donnees')));
  /* La rubrique s'appelle simplement « Options » depuis la v1.5, l'écran n'étant plus
     un fourre-tout « fichier et exports ». Ce qui compte reste le même : l'aide parle
     d'Options, et plus de l'onglet Données. */
