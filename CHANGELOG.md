@@ -3,6 +3,14 @@
 Copie du journal intégré à l'application (**À propos → Journal des versions**).
 La version faisant foi est celle du code.
 
+## 1.4-public
+
+Le Journal regroupe les <b>notes sans rattachement</b> — ni activité, ni rubrique — et permet de les ranger sur place. Elles n’apparaissaient jusqu’ici nulle part, tout en comptant dans les totaux. Supprimer une rubrique garde désormais la trace de ce à quoi chaque note était rattachée, si bien qu’on sait d’où elles viennent.
+
+## 1.3-public
+
+Une rubrique d’activité se renomme et change de famille directement dans la liste. Jusqu’ici elle ne pouvait qu’être ajoutée ou supprimée : corriger une faute de frappe imposait de la détruire et de la recréer, donc de détacher toutes ses notes sans moyen de rétablir le lien. Les notes pointent l’identifiant de la rubrique, jamais son nom : renommer est sans effet sur elles.
+
 ## 1.2-public
 
 Chaque rubrique dit maintenant ce qu’elle récupère automatiquement — le chrono du compteur, ou la durée des appels — et ce réglage se change dans la liste. Il n’était jusque-là réglable nulle part : une rubrique recréée à la main perdait définitivement cette récupération. Une même source ne peut appartenir qu’à une rubrique, sans quoi son temps serait compté deux fois. Et supprimer une rubrique demande confirmation en annonçant le nombre de notes qui seront détachées — un lien qu’on ne rétablit pas.

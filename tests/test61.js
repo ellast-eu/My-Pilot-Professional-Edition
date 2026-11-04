@@ -116,6 +116,53 @@ const J=n=>{const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().s
    && await p.evaluate(()=>rubriques().some(r=>r.id==='r-orga'))===false,
    confirmations.join(''));
 
+ /* --- 7. renommer sans rien détacher (v1.3) ------------------------------ */
+ /* Tout l'intérêt : l'identifiant ne bouge pas, donc les notes restent rattachées.
+    C'est ce qui rend le renommage sûr, là où supprimer-recréer détachait tout. */
+ await poser(); await p.waitForTimeout(400);
+ const avantRen=await p.evaluate(()=>({
+   id:rubriques().find(r=>r.id==='r-traitement').id,
+   liees:(D.notes||[]).filter(n=>n.rubrique_id==='r-traitement').length}));
+ await p.fill('[data-rubnom="r-traitement"]','Traitement groupé');
+ await p.evaluate(()=>document.querySelector('[data-rubnom="r-traitement"]')
+   .dispatchEvent(new Event('change',{bubbles:true})));
+ await p.waitForTimeout(400);
+ const apresRen=await p.evaluate(({j})=>{
+   const r=rubriques().find(x=>x.id==='r-traitement');
+   return {nom:r?r.nom:null, auto:r?r.auto:null,
+     liees:(D.notes||[]).filter(n=>n.rubrique_id==='r-traitement').length,
+     min:r?minutesRubrique(r.id,[j[0]]):0};
+ },{j:{0:J(0)}});
+ T('on peut renommer une rubrique', apresRen.nom==='Traitement groupé', ''+apresRen.nom);
+ T('  l’identifiant ne bouge pas', avantRen.id==='r-traitement');
+ T('  les notes restent rattachées', apresRen.liees===avantRen.liees && apresRen.liees===2,
+   apresRen.liees+' / '+avantRen.liees);
+ T('  et la récupération automatique est conservée',
+   apresRen.auto==='compteur' && apresRen.min===80, JSON.stringify(apresRen));
+
+ /* un nom vide est refusé, et l'ancien revient */
+ await p.fill('[data-rubnom="r-traitement"]','   ');
+ await p.evaluate(()=>document.querySelector('[data-rubnom="r-traitement"]')
+   .dispatchEvent(new Event('change',{bubbles:true})));
+ await p.waitForTimeout(400);
+ T('un nom vide est refusé',
+   await p.evaluate(()=>rubriques().find(r=>r.id==='r-traitement').nom)==='Traitement groupé');
+ T('  et le champ reprend l’ancien nom',
+   await p.evaluate(()=>document.querySelector('[data-rubnom="r-traitement"]').value)
+     ==='Traitement groupé');
+
+ /* la famille se change aussi, sans détruire la rubrique */
+ await p.selectOption('[data-rubfam="r-traitement"]','support'); await p.waitForTimeout(400);
+ const fam=await p.evaluate(()=>{
+   const r=rubriques().find(x=>x.id==='r-traitement');
+   return {fam:r.famille, nom:r.nom, auto:r.auto,
+     liees:(D.notes||[]).filter(n=>n.rubrique_id==='r-traitement').length};
+ });
+ T('la famille se change dans la liste', fam.fam==='support', JSON.stringify(fam));
+ T('  sans toucher au reste',
+   fam.nom==='Traitement groupé' && fam.auto==='compteur' && fam.liees===2,
+   JSON.stringify(fam));
+
  /* --- 7. mise en page ------------------------------------------------------ */
  for(const [w,hh] of [[1280,1000],[390,900]]){
    await p.setViewportSize({width:w,height:hh});

@@ -764,6 +764,8 @@ tr.arch td b{font-weight:normal}
   cursor:pointer;font-size:13px;line-height:1;padding:4px 6px;color:var(--encre-2)}
 .fr-cal:hover{background:var(--beton-2)}
 input.fr-faux{border-color:var(--rouge);background:rgba(200,30,30,.06)}
+.rub-nom{flex:1 1 150px;min-width:110px}
+.rub-fam{font-size:12px;max-width:140px}
 .rub-auto{font-size:12px;max-width:170px}
 .chp-rang{position:relative}
 .chp-poing{border:1px solid var(--trait);background:var(--papier);color:var(--encre-3);
@@ -840,7 +842,7 @@ hr.sep{border:0;border-top:1px solid var(--trait);margin:18px 0}
 "use strict";
 
 /* ================= etat ================= */
-var APP_VERSION = "1.2-public";
+var APP_VERSION = "1.4-public";
 
 /* ============================================================
    NOM DU POSTE — a modifier ici lors du deploiement sur un
@@ -1606,6 +1608,13 @@ function poserSourceAuto(rid,src){
   });
   rubriques().forEach(function(r){ if(r.id===rid) r.auto=src });
   return avant;
+}
+/* Redessiner la vue depuis le gestionnaire d'un champ qui a encore le focus casse le
+   DOM : le blur se declenche pendant le remplacement, et le noeud a retirer n'est deja
+   plus la. On rend la main au navigateur avant de redessiner. */
+function redessinerApres(){
+  if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  setTimeout(function(){ rendre() },0);
 }
 function minutesRubrique(rid,jours){
   var t=0;
@@ -4173,8 +4182,16 @@ function refDossier(c){
   if(!c) return "";
   return [c.reference||c.ref_technique||"",c.libelle||""].filter(Boolean).join(" \u00b7 ");
 }
+/* chantier_ref garde la trace de CE A QUOI la note etait rattachee — le champ porte un
+   nom historique, il vaut aussi pour une rubrique. Sans cette trace, une note detachee
+   ne dit plus d'ou elle vient, et il n'y a plus moyen de la remettre a sa place. */
 function souvenirLien(n){
-  if(n && n.chantier_id && !n.chantier_ref) n.chantier_ref=refDossier(chantierPar(n.chantier_id));
+  if(!n || n.chantier_ref) return;
+  if(n.chantier_id){ n.chantier_ref=refDossier(chantierPar(n.chantier_id)); return }
+  if(n.rubrique_id){
+    var r=rubriquePar(n.rubrique_id);
+    if(r) n.chantier_ref="rubrique « "+r.nom+" »";
+  }
 }
 function lienRompu(n){
   return !!(n && !n.chantier_id && !n.rubrique_id && n.chantier_ref);
@@ -5149,7 +5166,54 @@ function marquerCharge(){
   fichierCharge=true;
   vueActive="jour";                  /* premier chargement : on ouvre la journee */
 }
+/* Ni activite, ni rubrique : la note n'apparait nulle part ailleurs. Les plus
+   recentes d'abord — ce sont celles dont on se souvient encore. */
+function notesOrphelines(){
+  return (D.notes||[]).filter(function(n){
+    return !n.chantier_id && !n.rubrique_id;
+  }).sort(function(a,b){
+    return (b.date+" "+(b.heure||"")).localeCompare(a.date+" "+(a.heure||""));
+  });
+}
+/* Le choix propose ici ne liste que les rubriques : une installation reelle compte des
+   milliers d'activites, qu'on ne met pas dans une liste deroulante par ligne. Pour
+   rattacher a une activite, « Ouvrir la note » donne le formulaire complet et sa
+   recherche. */
+function optionsRubriques(){
+  return '<option value="">rattacher à…</option>'
+    +rubriques().map(function(r){
+      return '<option value="r:'+esc(r.id)+'">'+esc(r.nom)+'</option>';
+    }).join("");
+}
+function fragBlocOrphelines(){
+  var l=notesOrphelines();
+  if(!l.length) return "";
+  var plus=l.length>12 ? l.length-12 : 0;
+  return '<div class="bloc" style="margin-bottom:18px">'
+    +'<div class="bloc-tete"><h2>Notes sans rattachement</h2>'
+      +'<span class="compte">'+l.length+'</span></div>'
+    +'<div class="bloc-corps">'
+      +'<div class="note-aide" style="margin:0 0 10px">Ces notes ne sont rattachées ni à une '
+      +'activité ni à une rubrique : elles n\'apparaissent nulle part ailleurs. Rangez-les '
+      +'ici, ou ouvrez-les pour les rattacher à une activité.</div>'
+      +l.slice(0,12).map(function(n){
+        return '<div class="note">'
+          +'<div class="h">'+libCourt(n.date)+(n.heure?' \u00b7 '+esc(n.heure):"")
+            +(n.duree?' \u00b7 '+dureeLisible(n.duree):"")
+            +(n.chantier_ref?' \u00b7 <span style="color:var(--rouge)">était rattachée à : '
+               +esc(n.chantier_ref)+'</span>':"")+'</div>'
+          +(n.contenu?'<div class="txt">'+esc(n.contenu)+'</div>':"")
+          +'<div class="ligne">'
+            +'<select data-orph="'+esc(n.id)+'">'+optionsRubriques()+'</select>'
+            +'<button class="lien" data-note="'+esc(n.id)+'">Ouvrir la note</button>'
+          +'</div></div>';
+      }).join("")
+      +(plus?'<div class="note-aide" style="margin:8px 0 0">et '+plus+' de plus \u2014 '
+         +'rangez celles-ci, les suivantes apparaîtront.</div>':"")
+    +'</div></div>';
+}
 function vueJournal(){
+  var orph=fragBlocOrphelines();
   var q=filtreNotes.toLowerCase(),el=[];
   if(filtreJournal!=="appels"){
     (D.notes||[]).forEach(function(n){
@@ -5181,7 +5245,7 @@ function vueJournal(){
       +esc(libDate(d))+' <span class="mono" style="color:var(--encre-3)">('+parJour[d].length+')</span></div>'
       +parJour[d].map(function(x){ return x.kind==="note"?fragNote(x.o):fragAppel(x.o,true) }).join("")+'</div>';
   }).join("");
-  return '<div class="bloc"><div class="bloc-tete"><h2>Journal</h2>'
+  return orph+'<div class="bloc"><div class="bloc-tete"><h2>Journal</h2>'
     +'<span class="compte">'+nbN+' note(s) · '+nbA+' appel(s)</span></div>'
   +'<div class="bloc-corps">'
   +'<div class="ligne" style="margin:0 0 14px">'
@@ -5370,8 +5434,11 @@ function vueDonnees(){
         return '<div class="item"><span class="ordre">'
           +'<button class="fl" data-rubmv="'+esc(r.id)+'" data-sens="-1"'+(i===0?" disabled":"")+' title="Monter">\u25b2</button>'
           +'<button class="fl" data-rubmv="'+esc(r.id)+'" data-sens="1"'+(i===t.length-1?" disabled":"")+' title="Descendre">\u25bc</button>'
-          +'</span><span class="txt">'+esc(r.nom)
-          +' <span class="etiq gris">'+esc(libFamille(r.famille))+'</span></span>'
+          +'</span>'
+          +'<input type="text" class="rub-nom" data-rubnom="'+esc(r.id)+'" value="'+esc(r.nom)+'"'
+            +' title="Nom de la rubrique">'
+          +'<select class="rub-fam" data-rubfam="'+esc(r.id)+'" title="Famille">'
+            +selOpts(FAMILLES,r.famille)+'</select>'
           +'<select class="rub-auto" data-rubauto="'+esc(r.id)+'" title="Ce que cette rubrique récupère automatiquement">'
             +selOpts(SOURCES_AUTO,r.auto||"")+'</select>'
           +'<button class="sup" data-suprub="'+esc(r.id)+'">✕</button></div>';
@@ -5383,8 +5450,8 @@ function vueDonnees(){
       +'<select id="rubAuto" title="Récupération automatique">'+selOpts(SOURCES_AUTO,"")+'</select>'
       +'<button class="b mini creux" data-act="rub-add">Ajouter</button></div>'
     +'<div class="note-aide">Les flèches fixent l\'ordre d\'affichage, partout où les rubriques sont proposées. '
-      +'Les rubriques servent à rattacher les notes qui ne relèvent d\'aucun dossier daté. '
-      +'La liste à droite de chaque rubrique dit ce qu\'elle récupère toute seule : le chrono du compteur, ou la durée des appels. Une même source ne peut appartenir qu\'à une rubrique.</div>'
+      +'Les rubriques servent à rattacher les notes qui ne relèvent d\'aucun dossier daté. Une note rattachée à rien n\'apparaît nulle part : le Journal les regroupe dans un bloc « Notes sans rattachement », avec de quoi les ranger. '
+      +'Nom, famille et récupération automatique se modifient directement dans la liste : une rubrique n\'a jamais besoin d\'être supprimée pour être corrigée — et la supprimer détacherait ses notes sans retour. La récupération vaut le chrono du compteur ou la durée des appels ; une même source ne peut appartenir qu\'à une rubrique.</div>'
     +'<hr class="sep">'
     +'<label class="champ">Absences (congés, formations)</label>'
     +'<div class="ligne" style="margin-top:4px">'+inDate('id="absDate"',"")+'<button class="b mini" data-act="abs-add">Ajouter</button></div>'
@@ -8243,6 +8310,8 @@ function ajouterNote(){
 }
 
 var JOURNAL_VERSIONS = [
+  ["1.4-public","Le Journal regroupe les <b>notes sans rattachement</b> \u2014 ni activit\u00e9, ni rubrique \u2014 et permet de les ranger sur place. Elles n\u2019apparaissaient jusqu\u2019ici nulle part, tout en comptant dans les totaux. Supprimer une rubrique garde d\u00e9sormais la trace de ce \u00e0 quoi chaque note \u00e9tait rattach\u00e9e, si bien qu\u2019on sait d\u2019o\u00f9 elles viennent."],
+  ["1.3-public","Une rubrique d\u2019activit\u00e9 se renomme et change de famille directement dans la liste. Jusqu\u2019ici elle ne pouvait qu\u2019\u00eatre ajout\u00e9e ou supprim\u00e9e : corriger une faute de frappe imposait de la d\u00e9truire et de la recr\u00e9er, donc de d\u00e9tacher toutes ses notes sans moyen de r\u00e9tablir le lien. Les notes pointent l\u2019identifiant de la rubrique, jamais son nom : renommer est sans effet sur elles."],
   ["1.2-public","Chaque rubrique dit maintenant ce qu\u2019elle r\u00e9cup\u00e8re automatiquement \u2014 le chrono du compteur, ou la dur\u00e9e des appels \u2014 et ce r\u00e9glage se change dans la liste. Il n\u2019\u00e9tait jusque-l\u00e0 r\u00e9glable nulle part : une rubrique recr\u00e9\u00e9e \u00e0 la main perdait d\u00e9finitivement cette r\u00e9cup\u00e9ration. Une m\u00eame source ne peut appartenir qu\u2019\u00e0 une rubrique, sans quoi son temps serait compt\u00e9 deux fois. Et supprimer une rubrique demande confirmation en annon\u00e7ant le nombre de notes qui seront d\u00e9tach\u00e9es \u2014 un lien qu\u2019on ne r\u00e9tablit pas."],
   ["1.1-public","Les champs d\u2019une cat\u00e9gorie se r\u00e9agencent : tirez une ligne par sa poign\u00e9e, ou utilisez les fl\u00e8ches. L\u2019ordre de la fen\u00eatre est celui de la fiche. Un champ ajout\u00e9 et pas encore nomm\u00e9 survit au d\u00e9placement, et les saisies en cours ne sont pas perdues."],
   ["1.0-public","Premi\u00e8re version publiable, sous licence libre. Tout le vocabulaire du logiciel est d\u00e9sormais g\u00e9n\u00e9rique, libell\u00e9s comme cl\u00e9s de donn\u00e9es : les deux rappels de permanence s\u2019appellent Rappel 1 et Rappel 2, la rubrique de comptage \u00ab Traitement en s\u00e9rie \u00bb, et le second identifiant d\u2019une activit\u00e9 \u00ab R\u00e9f\u00e9rence technique \u00bb. Rien dans l\u2019application ne suppose plus un domaine d\u2019activit\u00e9 particulier : ce qui est sp\u00e9cifique \u00e0 un usage se configure, et s\u2019importe depuis un fichier de configuration. Un fichier enregistr\u00e9 avant cette version se convertit une fois, avec l\u2019outil fourni \u00e0 part. La num\u00e9rotation repart \u00e0 1.0 ; les versions pr\u00e9c\u00e9dentes, d\u00e9sormais suffix\u00e9es -private, restent au journal."],
@@ -9913,7 +9982,9 @@ document.addEventListener("click",function(e){
         +"Ce temps ne sera plus compté nulle part.";
       if(!confirm(msg)) return;
     }
-    (D.notes||[]).forEach(function(x){ if(x.rubrique_id===rid){ x.rubrique_id=""; n++ } });
+    (D.notes||[]).forEach(function(x){
+      if(x.rubrique_id===rid){ souvenirLien(x); x.rubrique_id=""; n++ }
+    });
     D.parametres.rubriques=rubriques().filter(function(r){return r.id!==rid});
     modifie(); rendre();
     toast("Rubrique supprimée"+(n?" — "+n+" note(s) détachée(s)":""));
@@ -10311,9 +10382,35 @@ document.addEventListener("change",function(e){
     if(t.checked){ toast("Animation activée — visible au prochain lancement") }
     return;
   }
+  if(t.hasAttribute && t.hasAttribute("data-orph")){
+    if(!t.value) return;
+    var no=notePar(t.getAttribute("data-orph"));
+    if(no){
+      poserLien(no,t.value);
+      no.chantier_ref="";          /* la trace a servi, elle n'a plus lieu d'etre */
+      modifie(); redessinerApres();
+      toast("Note rattachée");
+    }
+    return;
+  }
+  if(t.hasAttribute && t.hasAttribute("data-rubnom")){
+    var nn=t.value.trim();
+    if(!nn){
+      /* Une rubrique sans nom resterait dans toutes les listes de choix, invisible et
+         impossible a designer. On refuse, et on remet ce qui etait la. */
+      rubriques().forEach(function(r){ if(r.id===t.getAttribute("data-rubnom")) t.value=r.nom });
+      toast("Une rubrique doit porter un nom",true); return;
+    }
+    rubriques().forEach(function(r){ if(r.id===t.getAttribute("data-rubnom")) r.nom=nn });
+    modifie(); toast("Rubrique renommée"); return;
+  }
+  if(t.hasAttribute && t.hasAttribute("data-rubfam")){
+    rubriques().forEach(function(r){ if(r.id===t.getAttribute("data-rubfam")) r.famille=t.value });
+    modifie(); toast("Famille modifiée"); return;
+  }
   if(t.hasAttribute && t.hasAttribute("data-rubauto")){
     var pris=poserSourceAuto(t.getAttribute("data-rubauto"),t.value);
-    modifie(); rendre();
+    modifie(); redessinerApres();   /* une autre rubrique a pu perdre la sienne */
     toast(t.value ? (libSourceAuto(t.value)+(pris?" — retirée de « "+pris+" »":""))
                   : "Récupération automatique retirée");
     return;
