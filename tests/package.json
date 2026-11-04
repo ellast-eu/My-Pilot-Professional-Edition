@@ -1,0 +1,12 @@
+{
+  "name": "mypilot-pro-tests",
+  "private": true,
+  "description": "Bancs d'essai Playwright de My Pilot Professional Edition",
+  "scripts": {
+    "verif": "node verif.js",
+    "modules": "node verif-module.js ../module"
+  },
+  "dependencies": {
+    "playwright": "^1.49.1"
+  }
+}
