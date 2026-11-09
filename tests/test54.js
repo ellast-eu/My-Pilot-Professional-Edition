@@ -167,10 +167,18 @@ const JR={}; for(let k=-30;k<=30;k++) JR[k]=J(k);
  await p.waitForTimeout(450);
  const cr=await p.evaluate(()=>({
    gele:document.querySelector('#modCorps [name="date"]').disabled,
-   type:!!document.querySelector('#modCorps [name="evt_type"]')
+   /* v1.7 : le type d'evenement n'a plus de champ a lui. C'est le champ de la
+      categorie — « Type d'intervention » — qui le porte, et il compose le premier
+      evenement a la creation. */
+   ancien:!!document.querySelector('#modCorps [name="evt_type"]'),
+   type:!!document.querySelector('#modCorps [name="type"]:not([disabled])'),
+   liste:(document.querySelector('#modCorps [name="type"]')||{}).dataset
  }));
  T('à la création, Date reste saisissable', cr.gele===false);
- T('  avec le choix du type d’événement', cr.type);
+ T('  le champ de la catégorie porte le type', cr.type);
+ T('  il puise dans la liste de la catégorie',
+   cr.liste && cr.liste.liste==='types_intervention', cr.liste && cr.liste.liste);
+ T('  l’ancien champ séparé a disparu', cr.ancien===false);
  await p.fill('#modCorps [name="libelle"]','Créée à la main');
  await p.fill('#modCorps [name="date"]',JR[7]);
  await p.evaluate(()=>{

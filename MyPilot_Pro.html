@@ -863,7 +863,7 @@ hr.sep{border:0;border-top:1px solid var(--trait);margin:18px 0}
 "use strict";
 
 /* ================= etat ================= */
-var APP_VERSION = "1.6-public";
+var APP_VERSION = "1.7-public";
 
 /* ============================================================
    NOM DU POSTE — a modifier ici lors du deploiement sur un
@@ -877,7 +877,9 @@ var VERSION = 1;   /* version du schema de donnees */
 var TYPES_DEFAUT = ["Visite de chantier","Consignation","Mise hors tension","Réception / DOE",
   "Réunion","Déraccordement","Autre"];
 var OUVRAGES = ["Non défini","HTA aérien","HTA souterrain","BT aérien","BT souterrain","Mixte"];
-var STATUTS = [["planifie","Planifié"],["en_cours","En cours"],["realise","Réalisé"],
+/* « A planifier » ouvrait deja le jeu des rendez-vous : il manquait ici, et un dossier
+   simple naissait donc « Planifié » alors que rien ne l’etait encore. */
+var STATUTS = [["a_planifier","À planifier"],["planifie","Planifié"],["en_cours","En cours"],["realise","Réalisé"],
   ["reporte","Reporté"],["annule","Annulé"]];
 var STATUTS_RDV = [["a_planifier","À planifier"],["planifie","Planifié"],["a_preparer","À préparer"],
   ["pret","Prêt pour RDV"],["prepa_cr","Préparation CR"],["termine","Terminé"],
@@ -934,11 +936,22 @@ function typesEvt(){
   if(!estTableau(p.types_evenement) || !p.types_evenement.length) p.types_evenement=TYPES_EVT.slice();
   return p.types_evenement;
 }
+/* Depuis la v1.7, un evenement est qualifie par la liste de SA categorie — « Visite
+   de chantier », « Consignation » — et non plus par une liste generique. Les deux se
+   recouvraient (« Reunion » figurait dans l'une et dans l'autre) et obligeaient a
+   qualifier deux fois la meme chose : une fois l'activite, une fois l'evenement. */
+function listeDeCat(cle){
+  var K=catParCle(String(cle||"chantier"));
+  var l=K?D.parametres[K.liste]:null;
+  return estTableau(l)?l:[];
+}
 function typeEvtDeCat(cle){
+  var l=listeDeCat(cle);
+  if(l.length) return l[0];
   var t=TYPE_EVT_PAR_CAT[String(cle||"")];
   if(t) return t;
-  var l=typesEvt();
-  return l.length?l[0]:"Rendez-vous";
+  var g=typesEvt();
+  return g.length?g[0]:"Rendez-vous";
 }
 function libEtatEvt(v){
   var r=String(v||"prevu");
@@ -1119,8 +1132,18 @@ function libJalons(a){
 function syncDates(c){
   if(!c) return c;
   var e=evtReference(c);
-  if(e){ c.date=e.date; c.heure=e.heure||""; c.duree=+e.duree||0 }
-  else { c.date=""; c.heure=""; }
+  /* c.type suit l'evenement de reference comme c.date : une trentaine de lecteurs
+     (rapport, exports, tris, import) continuent de lire l'activite sans rien savoir
+     des evenements. Sans evenement, le type reste celui du dossier : on ne l'efface
+     pas, sans quoi un dossier non encore planifie sortirait de « Nature des affaires ». */
+  if(e){
+    c.date=e.date; c.heure=e.heure||""; c.duree=+e.duree||0;
+    if(e.type) c.type=e.type;
+  }else{
+    /* la duree ne se vidait pas : un dossier dont on retirait l'evenement gardait
+       60 minutes affichees en face d'une date vide. */
+    c.date=""; c.heure=""; c.duree=0;
+  }
   return c;
 }
 function classeStatut(c){
@@ -1323,11 +1346,50 @@ function normaliserCat(c){
   });
   return o;
 }
+/* ================= jeux de statuts =================
+   Deux jeux vivaient en dur dans le code — « simple » et « rendez-vous » — et ne
+   pouvaient donc ni etre corriges, ni servir de point de depart. Ils sont desormais
+   recopies dans le fichier a la premiere ouverture, au format « code|libelle », et
+   deviennent des listes comme les autres.
+
+   Le code est ce que portent les fiches ; le libelle est ce qu'on lit. Les separer
+   permet de renommer « Realise » en « Fait » sans toucher a une seule activite — et
+   c'est aussi pourquoi changer un CODE detache les fiches qui le portaient : la
+   fonction statutsOrphelins() le dit avant que ce soit fait.
+
+   Une valeur sans barre verticale vaut code ET libelle : les jeux ecrits a la main
+   (« 0.1 - Instruction du dossier ») continuent de marcher sans rien changer. */
+function paireStatut(v){
+  var t=String(v), i=t.indexOf("|");
+  if(i<=0) return [t,t];
+  return [t.slice(0,i).trim(), t.slice(i+1).trim()];
+}
+function estJeuStatuts(cle){
+  return /^(statuts|etats)/.test(String(cle||""));
+}
+function jeuxStatutsDispo(){
+  return listesDispo().map(function(x){ return x[0] }).filter(estJeuStatuts).sort();
+}
+/* Combien de fiches portent un code que le nouveau jeu ne propose plus. */
+function statutsOrphelins(cle,lignes){
+  var m={}, n=0, vus={};
+  lignes.forEach(function(v){ m[paireStatut(v)[0]]=1 });
+  categories().forEach(function(K){
+    if(K.statuts!==cle) return;
+    (D.chantiers||[]).forEach(function(c){
+      if((c.categorie||"chantier")!==K.cle) return;
+      var v=String(c.statut||"");
+      if(v && !m[v]){ n++; vus[v]=(vus[v]||0)+1 }
+    });
+  });
+  return {nb:n, valeurs:Object.keys(vus)};
+}
 function jeuStatuts(nom){
+  var l=D.parametres[nom];
+  if(estTableau(l) && l.length) return l.map(paireStatut);
   if(nom==="statuts_rdv") return STATUTS_RDV;
   if(nom==="statuts_simples") return STATUTS;
-  var l=D.parametres[nom];
-  return (l&&l.length) ? l.map(function(v){return [v,v]}) : STATUTS;
+  return STATUTS;
 }
 function permVierge(){
   return {actif:false,son:true,seances:[],rappels:[
@@ -2170,6 +2232,13 @@ function normaliser(o){
   v.parametres.themes_animation=p.themes_animation||THEMES_ANIM.slice();
   v.parametres.types_transverse=p.types_transverse||TYPES_TRANSV.slice();
   v.parametres.etats_affaire=p.etats_affaire||ETATS_AFFAIRE.slice();
+  /* 1.7 : les deux jeux du code entrent dans le fichier, au format code|libelle.
+     A partir de la, ils suivent le fichier et non plus le code — c'est le prix de
+     la modification, et c'est ce qui est demande. */
+  v.parametres.statuts_simples=(estTableau(p.statuts_simples)&&p.statuts_simples.length)
+    ? p.statuts_simples.map(String) : STATUTS.map(function(x){ return x[0]+"|"+x[1] });
+  v.parametres.statuts_rdv=(estTableau(p.statuts_rdv)&&p.statuts_rdv.length)
+    ? p.statuts_rdv.map(String) : STATUTS_RDV.map(function(x){ return x[0]+"|"+x[1] });
   v.parametres.statuts_dossier=p.statuts_dossier||STATUTS_DOSSIER.slice();
   v.parametres.marqueurs_fait=p.marqueurs_fait||MARQUEURS_FAIT.slice();
   v.parametres.contacts_ecartes=estTableau(p.contacts_ecartes)?p.contacts_ecartes.map(String):[];
@@ -2193,6 +2262,7 @@ function normaliser(o){
   v.parametres.id_fonction=String(p.id_fonction||"");
   v.parametres.id_entite=String(p.id_entite||"");
   v.parametres.rap_faits=String(p.rap_faits||"");
+  v.parametres.rap_hors=(p.rap_hors && typeof p.rap_hors==="object")?p.rap_hors:{};
   v.parametres.rap_objectifs=String(p.rap_objectifs||"");
   v.parametres.types_note=p.types_note||TYPES_NOTE.slice();
   v.parametres.ouvrages=p.ouvrages||OUVRAGES.slice();
@@ -2220,12 +2290,21 @@ function normaliser(o){
     if(!c.evenements.length && c.date){
       var _clos=Kx?estMarqueClos(c.statut,Kx.clos):!!CLOS[c.statut];
       c.evenements=[{id:"e"+uid(),date:c.date,heure:String(c.heure||""),duree:+c.duree||0,
-        type:(TYPE_EVT_PAR_CAT[String(c.categorie||"")]||"Rendez-vous"),
+        type:(c.type||TYPE_EVT_PAR_CAT[String(c.categorie||"")]||"Rendez-vous"),
         statut:(c.statut==="annule"?"annule":(_clos?"realise":"prevu")),libelle:""}];
     }else{
+      /* 1.7 : l’evenement portait un type generique (« Intervention », « Reunion »)
+         pendant que l’activite portait le vrai (« Visite de chantier »). On recopie le
+         second dans le premier quand le type de l’evenement n’appartient pas a la liste
+         de la categorie — signe qu’il vient de l’ancienne liste generique. */
+      /* on lit la liste deja normalisee, et non celle du fichier brut : une
+         configuration importee peut ne pas la porter alors que le modele la fournit. */
+      var _lc=(Kx && Kx.liste && estTableau(v.parametres[Kx.liste]))?v.parametres[Kx.liste]:[];
       c.evenements=c.evenements.map(function(e){
+        var _ty=String(e.type||"");
+        if(c.type && _lc.length && _lc.indexOf(_ty)===-1) _ty=c.type;
         return {id:e.id||("e"+uid()),date:dateValide(e.date)?e.date:"",heure:String(e.heure||""),
-                duree:+e.duree||0,type:String(e.type||"Rendez-vous"),
+                duree:+e.duree||0,type:_ty||String(e.type||"Rendez-vous"),
                 statut:String(e.statut||"prevu"),libelle:String(e.libelle||""),
                 jalon:e.jalon===true,
                 source:String(e.source||"")};
@@ -3294,10 +3373,28 @@ function ouvrirModale(titre,corps,boutons){
   });
   $("#modPied").innerHTML=g+'<div class="droite">'+dte+'</div>';
   $("#modale").showModal();
-  var pf=$("#modCorps").querySelector("input,textarea,select");
-  if(pf) pf.focus();
+  if(modSansFocus){ modSansFocus=false }
+  else{
+    var pf=$("#modCorps").querySelector("input,textarea,select");
+    if(pf) pf.focus();
+  }
 }
 function fermerModale(){ $("#modale").close() }
+/* Ajouter un evenement, cocher un jalon, enregistrer : chacun de ces gestes
+   reconstruit le dialogue entier. La position de lecture repartait donc en haut, et
+   sur une fiche longue on se retrouvait a trois ecrans du bouton qu'on venait de
+   cliquer. On la relit avant, on la repose apres.
+   Le focus automatique est neutralise pour l'occasion : sans cela le curseur se
+   placerait dans le Libelle, en haut, hors de vue — et la frappe suivante irait
+   silencieusement dans le mauvais champ. */
+var modSansFocus=false;
+function reouvrirDialogue(fn){
+  var e=$("#modCorps"), y=e?e.scrollTop:0;
+  modSansFocus=true;
+  fermerModale(); fn();
+  var f=$("#modCorps"); if(f) f.scrollTop=y;
+}
+function reouvrirFiche(id){ reouvrirDialogue(function(){ editerChantier(id) }) }
 /* Echap ferme une <dialog> par defaut : on intercepte pour la meme garde. */
 (function(){
   var d=document.getElementById("modale");
@@ -3611,7 +3708,6 @@ function formChantier(c,creation){
         +'<span class="note-aide" style="margin:2px 0 0">Vide : le dossier reste hors planning.</span></label>'
       +'<label class="champ">Heure'+inHeure('name="heure"',c.heure||"08:30")+'</label>'
       +'<label class="champ">Durée (min)<input type="number" name="duree" min="0" step="15" value="'+esc(c.duree||60)+'"></label>'
-      +'<label class="champ">Type d\'événement'+selGerable('name="evt_type"',"types_evenement",typeEvtDeCat(cat))+'</label>'
     /* Sur une fiche existante, ces trois champs ne sont plus la source : ils affichent
        l'evenement de reference et se modifient dans la liste, en dessous. Les laisser
        saisissables rouvrirait la porte a deux verites pour une meme date. */
@@ -3619,9 +3715,21 @@ function formChantier(c,creation){
         +'<span class="note-aide" style="margin:2px 0 0">'
         +(c.date?'Prochain événement \u2014 modifiable dans la liste ci-dessous.'
                 :'Aucun événement : le dossier reste hors planning.')+'</span></label>'
-      +'<label class="champ">Heure'+inHeure('name="heure" disabled',c.heure||"")+'</label>'
-      +'<label class="champ">Durée (min)<input type="number" name="duree" value="'+esc(c.duree||0)+'" disabled></label>')
-  +'<label class="champ">'+esc(K.champ)+selGerable('name="type"',K.liste,c.type)+'</label>'
+      /* Sans evenement, ni heure ni duree : ces trois champs decrivent l'evenement de
+         reference, et une activite qui n'en a pas n'a pas davantage d'horaire que de
+         date. Un fichier ancien pouvait porter une heure orpheline, affichee en face
+         d'une date vide. */
+      +'<label class="champ">Heure'+inHeure('name="heure" disabled',evenements(c).length?(c.heure||""):"")+'</label>'
+      +'<label class="champ">Durée (min)<input type="number" name="duree" value="'+esc(evenements(c).length?(c.duree||0):"")+'" disabled></label>')
+  /* Le type d’intervention appartient a l’evenement : sur une fiche qui en porte, le
+     champ n’est plus la source mais le reflet du prochain — exactement comme la date.
+     Sans evenement, il reste saisissable : un dossier peut etre qualifie avant d’etre
+     planifie, et le premier evenement cree reprendra sa valeur. */
+  +(evenements(c).length
+    ? '<label class="champ">'+esc(K.champ)+selGerable('name="type" disabled',K.liste,c.type)
+        +'<span class="note-aide" style="margin:2px 0 0">\u00c9v\u00e9nement de r\u00e9f\u00e9rence \u2014 modifiable dans la liste ci-dessous.</span></label>'
+    : '<label class="champ">'+esc(K.champ)+selGerable('name="type"',K.liste,c.type)
+        +(creation?"":'<span class="note-aide" style="margin:2px 0 0">Aucun \u00e9v\u00e9nement : ce type reste celui du dossier.</span>')+'</label>')
   +'<label class="champ">'+esc(K.tiers)+'<input type="text" name="tiers" value="'+esc(c.tiers)+'"></label>'
   +'<label class="champ">Contact<input type="text" name="contact_nom" value="'+esc(c.contact_nom)+'"></label>'
   +'<label class="champ">Téléphone<input type="text" name="contact_tel" value="'+esc(c.contact_tel)+'"></label>'
@@ -3654,14 +3762,17 @@ function lireChantier(c){
     if(_d){
       var _e=_l[0]||evtNormaliser({},c.categorie);
       _e.date=_d; _e.heure=valChamp("heure"); _e.duree=+valChamp("duree")||0;
-      _e.type=valChamp("evt_type")||_e.type||typeEvtDeCat(c.categorie);
+      _e.type=valChamp("type")||_e.type||typeEvtDeCat(c.categorie);
       if(!_l.length) _l.push(_e);
     }else if(_l.length===1 && _l[0].statut==="prevu"){
       c.evenements=[];      /* on vide la date a la creation : pas d'evenement du tout */
     }
   }
+  /* Desactive, le champ est un reflet : le relire ecraserait le type de l’evenement
+     par celui qu’il affiche, et syncDates vient justement de le poser. */
+  var _t=$("#modCorps").querySelector('[name="type"]');
+  if(_t && !_t.disabled) c.type=_t.value.trim();
   syncDates(c);
-  c.type=valChamp("type");
   c.tiers=valChamp("tiers");
   c.contact_nom=valChamp("contact_nom");
   c.contact_tel=valChamp("contact_tel");
@@ -3805,7 +3916,7 @@ function basculerProjet(c,on){
        toujours la. Effacer un historique de justifications serait le pire service. */
     if(c.projet) c.projet.actif=false;
   }
-  modifie(); fermerModale(); editerChantier(c.id);
+  modifie(); reouvrirFiche(c.id);
   toast(on?"Suivi projet activé":"Suivi projet désactivé");
 }
 /* Cocher ou decocher un jalon, cote evenement ou cote tache. */
@@ -3821,7 +3932,7 @@ function basculerJalon(cle){
       if(n.id===nid && n.suite) n.suite.jalon=!n.suite.jalon;
     });
   }
-  modifie(); fermerModale(); editerChantier(c.id);
+  modifie(); reouvrirFiche(c.id);
 }
 
 /* La liste des evenements d'une activite. Elle remplace la date unique : un dossier
@@ -3877,7 +3988,8 @@ function ficheFormEvt(id){
       +inDate('id="fevDate" title="Date"',d)
       +inHeure('id="fevHeure" title="Heure"',hh)
       +'<input type="number" id="fevDuree" min="0" step="15" value="'+esc(du)+'" style="width:84px" title="Durée (min)">'
-      +selGerable('id="fevType"',"types_evenement",v?v.type:typeEvtDeCat(c.categorie))
+      +selGerable('id="fevType"',(catParCle(c.categorie||"chantier")||{}).liste||"types_evenement",
+          v?v.type:(c.type||typeEvtDeCat(c.categorie)))
       +'<select id="fevEtat">'+selOpts(ETATS_EVT,v?v.statut:"prevu")+'</select>'
     +'</div>'
     +'<div class="ligne" style="margin-top:6px">'
@@ -3885,8 +3997,21 @@ function ficheFormEvt(id){
       +'<button class="b mini" data-act="fiche-add-evt">'+(v?"Enregistrer l\u2019événement":"Ajouter l\u2019événement")+'</button>'
     +'</div></div>';
   armerChampsFr(e);
+  evtEmpreinte=empreinteFormEvt();
   var f=$("#fevDate"); if(f) f.focus();
 }
+/* Une note vide ne se distingue pas d'une note jamais commencee : son champ est
+   vide dans les deux cas. Un evenement, lui, nait deja rempli — date du jour, 08:30,
+   60 minutes. On ne peut donc pas le juger sur son contenu, mais sur son ecart : ce
+   qui a ete touche depuis l'ouverture du formulaire merite d'etre defendu, le reste
+   non. Ouvrir le formulaire puis se raviser ne declenche rien. */
+var evtEmpreinte=null;
+function empreinteFormEvt(){
+  var d=$("#fevDate"); if(!d) return null;
+  return [d.value,v$("#fevHeure"),v$("#fevDuree"),v$("#fevType"),v$("#fevEtat"),v$("#fevLib")]
+    .join("\u0001");
+}
+function v$(sel){ var e=$(sel); return e?e.value:"" }
 function ajouterEvtDepuisFiche(){
   var c=chantierPar(ficheEnCours); if(!c) return;
   var d=$("#fevDate")?$("#fevDate").value.trim():"";
@@ -3902,8 +4027,8 @@ function ajouterEvtDepuisFiche(){
   if(evtEnCours) l.forEach(function(x){ if(x.id===evtEnCours) trouve=x });
   if(trouve){ for(var k in v) if(v.hasOwnProperty(k)) trouve[k]=v[k] }
   else l.push(evtNormaliser(v,c.categorie));
-  evtEnCours=null; syncDates(c); modifie();
-  fermerModale(); editerChantier(c.id);
+  evtEnCours=null; evtEmpreinte=null; syncDates(c); modifie();
+  reouvrirFiche(c.id);
   toast(trouve?"Événement modifié":"Événement ajouté");
 }
 function supprimerEvt(id){
@@ -3911,14 +4036,14 @@ function supprimerEvt(id){
   lireChantier(c);
   c.evenements=evenements(c).filter(function(e){ return e.id!==id });
   syncDates(c); modifie();
-  fermerModale(); editerChantier(c.id);
+  reouvrirFiche(c.id);
   toast("Événement supprimé");
 }
 function etatEvt(id,v){
   var c=chantierPar(ficheEnCours); if(!c) return;
   evenements(c).forEach(function(e){ if(e.id===id) e.statut=v });
   syncDates(c); modifie();
-  fermerModale(); editerChantier(c.id);
+  reouvrirFiche(c.id);
 }
 function ficheFormNote(){
   var e=$("#ficheAjout");
@@ -3968,13 +4093,17 @@ function ajouterDepuisFiche(kind){
   D.notes.push(n);
   dureeFiche=0;
   modifie();
-  fermerModale(); editerChantier(c.id);
+  reouvrirFiche(c.id);
   toast(kind==="note"?"Note ajoutée au dossier":"Tâche ajoutée");
 }
-/* Le formulaire « + Note / + Tache » de la fiche est un ilot : « Enregistrer » lit les
-   champs de l'activite, pas celui-la. Ce qui y etait tape partait donc en silence, par
-   n'importe quelle sortie — bouton, croix ou Echap. */
+/* Les formulaires « + Événement », « + Note » et « + Tache » de la fiche sont des
+   ilots : « Enregistrer » lit les champs de l'activite, pas les leurs. Ce qui y etait
+   tape partait donc en silence, par n'importe quelle sortie — bouton, croix ou Echap. */
 function saisieFicheEnAttente(){
+  var E=empreinteFormEvt();
+  if(E!==null && evtEmpreinte!==null && E!==evtEmpreinte)
+    return {champ:$("#fevDate"),quoi:"événement",
+      bouton:evtEnCours?"Enregistrer l’événement":"Ajouter l’événement"};
   var t=$("#fnTxt");
   if(t && t.value.trim()) return {champ:t,quoi:"note",bouton:"Ajouter la note"};
   var q=$("#ftTxt");
@@ -4051,12 +4180,16 @@ function editerChantier(id){
       }
     }},
     {txt:"Fermer",fn:function(){ if(quitterFicheAutorise()) fermerModale() },droite:true},
+    /* Enregistrer enregistre, il ne congedie pas : seules la croix et Fermer ferment.
+       Une fiche se remplit en plusieurs passes, et devoir la rouvrir entre chaque
+       etait un aller-retour pour rien. L'exception est la cloture, qui ouvre son
+       propre dialogue : il faut bien lui laisser la place. */
     {txt:"Enregistrer",classe:"",droite:true,fn:function(){
       if(bloqueSiSaisieFiche()) return;
       var avant=c.statut;
-      lireChantier(c); fermerModale(); modifie();
-      if(!CLOS[avant] && estClos(c)) suggererCloture(c);
-      rendre(); toast("Activité mise à jour");
+      lireChantier(c); modifie();
+      if(!CLOS[avant] && estClos(c)){ fermerModale(); rendre(); suggererCloture(c); return }
+      rendre(); reouvrirFiche(c.id); toast("Activité enregistrée");
     }}
   ]);
 }
@@ -4092,8 +4225,13 @@ function editerNote(id){
   var boutonsN=[
     {txt:"Supprimer",classe:"creux",fn:function(){
       if(confirm("Supprimer cette note ?")){
+        /* On revient d'ou l'on vient. Une note se supprime presque toujours depuis
+           l'activite qui la porte, et fermer tout obligeait a la rouvrir. */
+        var cible=n.chantier_id;
         D.notes=D.notes.filter(function(x){return x.id!==id});
-        fermerModale(); modifie(); rendre(); toast("Note supprimée");
+        fermerModale(); modifie();
+        if(cible && chantierPar(cible)) editerChantier(cible); else rendre();
+        toast("Note supprimée");
       }
     }},
     {txt:"Compte rendu",classe:"creux",fn:function(){
@@ -4115,8 +4253,10 @@ function editerNote(id){
     }},
     {txt:"Fermer",fn:fermerModale,droite:true},
     {txt:"Enregistrer",classe:"",droite:true,fn:function(){
-      lireNote(n);
-      fermerModale(); modifie(); rendre(); toast("Note mise à jour");
+      lireNote(n); modifie(); rendre();
+      /* meme regle que la fiche d'activite : on enregistre, on reste */
+      reouvrirDialogue(function(){ editerNote(id) });
+      toast("Note enregistrée");
     }}
   ]));
 }
@@ -5482,33 +5622,141 @@ function sectionCategories(){
 }
 
 /* ---- 5. Listes ---- */
+/* La section etait une liste de seize cles ecrites en dur. Toute liste creee hors de
+   cette enumeration — par un import de configuration, par une version anterieure, par
+   une categorie sur mesure — existait dans les menus deroulants sans etre editable
+   nulle part. On part donc de ce que le fichier contient vraiment, et non de ce que le
+   code croit savoir : une liste qui existe se voit, toujours. */
+var LIBELLES_LISTES={
+  statuts_simples:"Jeu simple — activités sans cycle particulier",
+  statuts_rdv:"Jeu rendez-vous — convocations et animations",
+  types_evenement:"Types d'événement (liste générique, héritée)",
+  types_intervention:"Types d'intervention (dossiers)",
+  motifs_appel:"Motifs d'appel (assistance)",
+  motifs_convocation:"Motifs de convocation",
+  themes_animation:"Thèmes d'animation",
+  types_transverse:"Natures d'activité transverse",
+  etats_affaire:"États du dossier",
+  statuts_dossier:"Statuts d'avancement",
+  civilites:"Civilités",
+  actes_prevention:"Actes de prévention (rapport) — vide = détection automatique",
+  marqueurs_fait:"Marqueurs de réalisation (colonne date de l'import)",
+  types_dossier:"Types de dossier",
+  categories_org:"Catégories d'organisation",
+  types_relation:"Types de relation (libellé|réciproque)",
+  types_note:"Types de note (journal)",
+  ouvrages:"Ouvrages"
+};
+/* Ces deux-la sont des registres d'exclusion, pas des listes de valeurs : ils n'ont
+   rien a faire ni dans cet ecran, ni dans le choix de liste d'un champ. */
+var LISTES_TECHNIQUES={contacts_ecartes:1,orgs_ecartees:1};
+function ordreListes(){
+  var connues=[],autres=[];
+  for(var k in LIBELLES_LISTES)
+    if(LIBELLES_LISTES.hasOwnProperty(k) && estTableau(D.parametres[k])) connues.push(k);
+  listesDispo().forEach(function(x){
+    if(!LIBELLES_LISTES.hasOwnProperty(x[0])) autres.push(x[0]);
+  });
+  autres.sort();
+  return connues.concat(autres);
+}
+/* Une liste est employee des qu'une categorie s'en sert, pour son champ principal,
+   pour son jeu de statuts ou pour l'un de ses champs propres. */
+function listeEmployeePar(cle){
+  var out=[];
+  categories().forEach(function(K){
+    var pris=(K.liste===cle)||(K.statuts===cle)
+      ||(K.champs||[]).some(function(f){ return f.liste===cle });
+    if(pris) out.push(K.lib);
+  });
+  return out;
+}
+function sectionJeuxStatuts(){
+  var l=jeuxStatutsDispo();
+  return '<div class="bloc"><div class="bloc-tete"><h2>Jeux de statuts</h2>'
+    +'<span class="compte">'+l.length+'</span></div><div class="bloc-corps">'
+    +'<div class="note-aide" style="margin:0 0 4px">Un jeu de statuts d\u00e9crit le cycle de vie d\u2019une cat\u00e9gorie. '
+      +'Une valeur par ligne, sous la forme <b>code|libell\u00e9</b> \u2014 le code est ce que portent les fiches, '
+      +'le libell\u00e9 ce que vous lisez. Renommer le libell\u00e9 ne touche aucune activit\u00e9 ; changer le code d\u00e9tache '
+      +'celles qui le portaient, et vous en serez averti. Une ligne sans barre verticale sert des deux.</div>'
+    +'<div class="ligne" style="margin:10px 0 4px">'
+      +'<button class="b mini creux" data-act="jeu-neuf">\uff0b Nouveau jeu</button>'
+      +'<span class="note-aide" style="margin:0">il se choisit ensuite dans Options \u203a Cat\u00e9gories</span>'
+    +'</div>'
+    +'<div class="grille-listes">'
+    +l.map(function(k){
+      var pris=listeEmployeePar(k);
+      return '<div><label class="champ" style="margin-top:10px">'
+         +esc(LIBELLES_LISTES[k]||k.replace(/_/g," "))+'</label>'
+       +'<textarea data-liste-txt="'+esc(k)+'" style="width:100%;min-height:104px;padding:8px;border:1px solid var(--trait);border-radius:2px;font-family:var(--data);font-size:13px">'
+       +esc((D.parametres[k]||[]).join("\n"))+'</textarea>'
+       +'<div class="ligne" style="margin-top:4px">'
+         +'<span class="note-aide" style="margin:0">'
+         +(pris.length?'employ\u00e9 par '+esc(pris.join(", ")):'employ\u00e9 par aucune cat\u00e9gorie')+'</span>'
+         +(pris.length||LIBELLES_LISTES.hasOwnProperty(k)?"":'<button class="b mini creux" data-liste-sup="'+esc(k)+'">Supprimer</button>')
+       +'</div></div>';
+    }).join("")
+    +'</div></div></div>';
+}
+function creerJeuStatuts(){
+  var n=prompt("Nom du nouveau jeu de statuts :","");
+  if(n===null) return;
+  var cle=String(n).trim().toLowerCase().replace(/[^a-z0-9_]+/g,"_").replace(/^_+|_+$/g,"");
+  if(!cle){ toast("Nom invalide",true); return }
+  if(!estJeuStatuts(cle)) cle="statuts_"+cle;
+  if(D.parametres[cle]!==undefined){ toast("Ce jeu existe d\u00e9j\u00e0",true); return }
+  /* On part du jeu simple plutot que du vide : un jeu sans valeur rendrait la
+     categorie qui l\u2019adopte inutilisable, et personne n\u2019invente un cycle de vie
+     devant une zone de texte blanche. */
+  D.parametres[cle]=(D.parametres.statuts_simples||STATUTS.map(function(x){return x[0]+"|"+x[1]})).slice();
+  modifie(); rendre(); toast("Jeu \u00ab "+cle+" \u00bb cr\u00e9\u00e9, \u00e0 adapter");
+}
 function sectionListes(){
-  return '<div class="bloc"><div class="bloc-tete"><h2>Listes de valeurs</h2></div><div class="bloc-corps">'
+  var cles=ordreListes().filter(function(k){ return !estJeuStatuts(k) });
+  return sectionJeuxStatuts()
+    +'<div class="bloc"><div class="bloc-tete"><h2>Listes de valeurs</h2>'
+    +'<span class="compte">'+cles.length+'</span></div><div class="bloc-corps">'
     +'<div class="note-aide" style="margin:0 0 4px">Chaque liste est enregistrée dès que vous quittez le champ — '
       +'inutile de valider. Elles sont aussi modifiables à la volée depuis les formulaires, via ＋ Ajouter à la liste.</div>'
+    +'<div class="ligne" style="margin:10px 0 4px">'
+      +'<button class="b mini creux" data-act="liste-neuve">＋ Nouvelle liste</button>'
+      +'<span class="note-aide" style="margin:0">une liste sur mesure se choisit ensuite depuis un champ de catégorie</span>'
+    +'</div>'
     +'<div class="grille-listes">'
-    +[["types_evenement","Types d'événement (dates posées sur une activité)"],
-      ["types_intervention","Types d'intervention (dossiers)"],
-      ["motifs_appel","Motifs d'appel (assistance)"],
-      ["motifs_convocation","Motifs de convocation"],
-      ["themes_animation","Thèmes d'animation"],
-      ["types_transverse","Natures d'activité transverse"],
-      ["etats_affaire","États du dossier"],
-      ["statuts_dossier","Statuts d'avancement"],
-      ["civilites","Civilités"],
-      ["actes_prevention","Actes de prévention (rapport) — vide = détection automatique"],
-      ["marqueurs_fait","Marqueurs de réalisation (colonne date de l'import)"],
-      ["types_dossier","Types de dossier"],
-      ["categories_org","Catégories d'organisation"],
-      ["types_relation","Types de relation (libellé|réciproque)"],
-      ["types_note","Types de note (journal)"],
-      ["ouvrages","Ouvrages"]].map(function(x){
-      return '<div><label class="champ" style="margin-top:10px">'+esc(x[1])+' — une valeur par ligne</label>'
-       +'<textarea data-liste-txt="'+x[0]+'" style="width:100%;min-height:88px;padding:8px;border:1px solid var(--trait);border-radius:2px;font-family:var(--data);font-size:13px">'
-       +esc((D.parametres[x[0]]||[]).join("\n"))+'</textarea></div>';
+    +cles.map(function(k){
+      var connue=LIBELLES_LISTES.hasOwnProperty(k);
+      var lib=connue?LIBELLES_LISTES[k]:k.replace(/_/g," ");
+      var pris=connue?[]:listeEmployeePar(k);
+      return '<div><label class="champ" style="margin-top:10px">'+esc(lib)+' — une valeur par ligne</label>'
+       +'<textarea data-liste-txt="'+esc(k)+'" style="width:100%;min-height:88px;padding:8px;border:1px solid var(--trait);border-radius:2px;font-family:var(--data);font-size:13px">'
+       +esc((D.parametres[k]||[]).join("\n"))+'</textarea>'
+       +(connue?"":'<div class="ligne" style="margin-top:4px">'
+          +'<span class="note-aide" style="margin:0">liste sur mesure · '
+          +(pris.length?'utilisée par '+esc(pris.join(", ")):'utilisée par aucune catégorie')+'</span>'
+          +(pris.length?"":'<button class="b mini creux" data-liste-sup="'+esc(k)+'">Supprimer</button>')
+        +'</div>')
+       +'</div>';
     }).join("")
     +'</div>'
   +'</div></div>';
+}
+function creerListe(){
+  var n=prompt("Nom de la nouvelle liste — lettres, chiffres et tirets bas :","");
+  if(n===null) return;
+  var cle=String(n).trim().toLowerCase().replace(/[^a-z0-9_]+/g,"_").replace(/^_+|_+$/g,"");
+  if(!cle){ toast("Nom de liste invalide",true); return }
+  if(D.parametres[cle]!==undefined){ toast("Cette liste existe d\u00e9j\u00e0",true); return }
+  D.parametres[cle]=[];
+  modifie(); rendre(); toast("Liste \u00ab "+cle+" \u00bb cr\u00e9\u00e9e");
+}
+function supprimerListe(cle){
+  if(LIBELLES_LISTES.hasOwnProperty(cle)){ toast("Cette liste fait partie du mod\u00e8le",true); return }
+  var pris=listeEmployeePar(cle);
+  if(pris.length){ toast("Employ\u00e9e par "+pris.join(", "),true); return }
+  var n=(D.parametres[cle]||[]).length;
+  if(!confirm("Supprimer la liste \u00ab "+cle+" \u00bb et ses "+n+" valeur(s) ?\n\nLes fiches qui portent ces valeurs les conservent : seule la liste de choix dispara\u00eet.")) return;
+  delete D.parametres[cle];
+  modifie(); rendre(); toast("Liste supprim\u00e9e");
 }
 
 /* ---- 6. Affichage ---- */
@@ -5608,6 +5856,10 @@ function vueRapport(){
       +'placeholder="Formations souhaitées, évolution de poste, moyens nécessaires…">'+esc(D.parametres.rap_objectifs||"")+'</textarea></label>'
     +'<div class="note-aide">Ces trois champs et ces deux textes sont repris tels quels dans le rapport PDF.</div>'
   +'</div></div>'
+  /* a droite : la colonne y etait vide sous l'identite, et la gauche depassait d'un
+     demi-ecran. Les rubriques sont de toute facon de la meme famille — ce que le
+     rapport dira de vous. */
+  +fragRubriquesRap()
   +'</div></div>';
 }
 
@@ -6362,7 +6614,8 @@ function listesDispo(){
   var l=[];
   for(var k in D.parametres)
     if(D.parametres.hasOwnProperty(k) && Object.prototype.toString.call(D.parametres[k])==="[object Array]"
-       && k!=="categories" && k!=="absences" && k!=="jours_ouvres" && k!=="rubriques")
+       && k!=="categories" && k!=="absences" && k!=="jours_ouvres" && k!=="rubriques"
+       && !LISTES_TECHNIQUES[k])
       l.push([k,k.replace(/_/g," ")]);
   return l;
 }
@@ -6400,8 +6653,11 @@ function editerCat(cle){
   var K=catParCle(cle);
   if(!K) return;
   catEdit=cle;
-  var jeux=[["statuts_simples","Simple (planifié, en cours, réalisé…)"],["statuts_rdv","Rendez-vous (à planifier → terminé)"]]
-    .concat(listesDispo().filter(function(x){return x[0].indexOf("etats")===0||x[0].indexOf("statuts")===0}));
+  /* Les deux jeux du code vivent desormais dans le fichier : les lister en dur en
+     plus de listesDispo() les aurait fait apparaitre deux fois. */
+  var jeux=jeuxStatutsDispo().map(function(k){
+    return [k,(LIBELLES_LISTES[k]||k.replace(/_/g," "))+" ("+jeuStatuts(k).length+")"];
+  });
   var corps='<div class="grille">'
     +'<label class="champ">Nom au singulier<input type="text" name="lib" value="'+esc(K.lib)+'"></label>'
     +'<label class="champ">Nom au pluriel<input type="text" name="plur" value="'+esc(K.plur)+'"></label>'
@@ -8157,11 +8413,76 @@ function rpChargeSem(l){
       +'<text x="'+(x0-6)+'" y="'+(base+3)+'" text-anchor="end">0</text></g>'
     +b+'<g font-family="Consolas,monospace" font-size="8" fill="#4A514C">'+lab+'</g></svg>';
 }
+/* ================= rubriques du rapport =================
+   Un rapport mensuel ne se fait pas toujours a la meme personne ni pour la meme
+   raison : la permanence telephonique interesse un responsable d'equipe, pas un jury,
+   et la charge a venir n'a rien a faire dans un bilan de fin d'annee. Chaque rubrique
+   se coche donc, et une page dont tout a ete decoche ne sort pas reduite a son
+   en-tete — voir rapElaguer().
+
+   Le reglage est enregistre a l'envers : on retient ce qui est EXCLU. Une rubrique
+   ajoutee plus tard est ainsi incluse d'office, sans que personne ait a y penser. */
+var RAP_SECTIONS=[
+  ["indicateurs","Indicateurs de la p\u00e9riode","Synth\u00e8se"],
+  ["mois","Activit\u00e9 mois par mois","Synth\u00e8se"],
+  ["nature","Nature des affaires et avancement","Synth\u00e8se"],
+  ["temps","R\u00e9partition du temps trac\u00e9","Charge et production"],
+  ["journal","Journal","Charge et production"],
+  ["compteur","Compteur de traitement","Charge et production"],
+  ["permanence","Assistance t\u00e9l\u00e9phonique","Charge et production"],
+  ["statuts","D\u00e9tail des statuts","D\u00e9tail et pr\u00e9vention"],
+  ["vigilance","Points de vigilance","D\u00e9tail et pr\u00e9vention"],
+  ["suivi","Actions de suivi","D\u00e9tail et pr\u00e9vention"],
+  ["prevention","Actes de pr\u00e9vention","D\u00e9tail et pr\u00e9vention"],
+  ["faits","Faits marquants","D\u00e9tail et pr\u00e9vention"],
+  ["charge","T\u00e2ches et rendez-vous \u00e0 venir","Charge \u00e0 venir"],
+  ["lecture","Lecture de la charge","Charge \u00e0 venir"],
+  ["objectifs","Objectifs et besoins","Charge \u00e0 venir"]
+];
+function rapInclus(cle){ return !(D.parametres.rap_hors||{})[cle] }
+function basculerRubriqueRap(cle,on){
+  if(!D.parametres.rap_hors) D.parametres.rap_hors={};
+  if(on) delete D.parametres.rap_hors[cle];
+  else D.parametres.rap_hors[cle]=1;
+  modifie();
+}
+/* Retirer apres coup les pages devenues vides evite de truffer la construction du
+   rapport de conditions imbriquees : une page utile contient toujours un <h2>. */
+function rapElaguer(h){
+  var p=h.split('<div class="rp-page">'), out=p.shift();
+  p.forEach(function(x){ if(x.indexOf("<h2")>=0) out+='<div class="rp-page">'+x });
+  return out;
+}
+function fragRubriquesRap(){
+  var pages=[],vu={};
+  RAP_SECTIONS.forEach(function(x){ if(!vu[x[2]]){ vu[x[2]]=1; pages.push(x[2]) } });
+  var hors=D.parametres.rap_hors||{}, n=RAP_SECTIONS.filter(function(x){return !hors[x[0]]}).length;
+  return '<div class="bloc" style="margin-top:18px"><div class="bloc-tete"><h2>Rubriques du rapport PDF</h2>'
+    +'<span class="compte">'+n+' / '+RAP_SECTIONS.length+'</span></div><div class="bloc-corps">'
+    +'<div class="note-aide" style="margin:0 0 10px">D\u00e9cochez ce que ce rapport-ci n\u2019a pas \u00e0 montrer. '
+      +'Une page enti\u00e8rement d\u00e9coch\u00e9e ne s\u2019imprime pas. Le r\u00e9glage est conserv\u00e9 d\u2019un rapport \u00e0 l\u2019autre.</div>'
+    +pages.map(function(pg){
+      return '<div style="margin-bottom:10px">'
+        +'<div class="puce-lbl" style="margin-bottom:4px">'+esc(pg)+'</div>'
+        +RAP_SECTIONS.filter(function(x){ return x[2]===pg }).map(function(x){
+          return '<label style="font-size:13.5px;display:flex;gap:6px;align-items:center;padding:2px 0">'
+            +'<input type="checkbox" data-raprub="'+esc(x[0])+'"'+(hors[x[0]]?"":" checked")+'> '
+            +esc(x[1])+'</label>';
+        }).join("")
+      +'</div>';
+    }).join("")
+    +'<div class="ligne" style="margin-top:4px">'
+      +'<button class="lien" data-act="rap-tout">tout cocher</button>'
+      +'<button class="lien" data-act="rap-rien">tout d\u00e9cocher</button>'
+    +'</div>'
+  +'</div></div>';
+}
 function construireRapportPDF(a,b){
   var o=statsPeriode(a,b), pa=periodeAvant(a,b), q=statsPeriode(pa[0],pa[1]);
   var P=D.parametres, h="";
 
   h+='<div class="rp-page">'+rpTete("Rapport d\u2019activité",a,b,"Synthèse \u00b7 document non nominatif");
+  if(rapInclus("indicateurs")){
   h+='<h2>Indicateurs de la période</h2>';
   h+='<p class="rp-i">Évolution mesurée sur la période précédente de même durée ('
     +esc(libJour(pa[0]))+' au '+esc(libJour(pa[1]))+'). Un dossier est rattaché à la période '
@@ -8184,57 +8505,64 @@ function construireRapportPDF(a,b){
       +(o.nonQualif?' '+o.nonQualif+' archive(s) non qualifiée(s), exclues du décompte.':"")
       +'</p>';
   }
-  if(o.sansCloture.length){
+  }
+  if(rapInclus("indicateurs") && o.sansCloture.length){
     h+='<p class="rp-i" style="border-left:3px solid var(--rouge);padding-left:9px;margin-top:10px">'
       +'<b>À vérifier avant diffusion</b> \u2014 aucune activité n\u2019est comptée comme menée à terme pour : '
       +esc(o.sansCloture.join(", "))+'. Qualifiez vos archives en « traité » (bouton dans Activités), '
       +'ou vérifiez que le statut de clôture de ces catégories correspond à un statut '
       +'réellement utilisé. Corrigez-le dans Options \u203a Configurer les catégories.</p>';
   }
-  if(o.mois.length>1){
+  if(rapInclus("mois") && o.mois.length>1){
     h+='<h2>Activité mois par mois</h2><p class="rp-i">Entrées de planning menées à terme. '
       +'Trait discontinu : moyenne mobile sur trois mois.</p>'+rpCourbe(o.mois);
   }
-  var pc=plafonner(o.parCat,7,"autres natures");
-  h+='<div class="rp-duo"><div><h2>Nature des affaires</h2>'
-    +rpBarres(pc.l,o.acts.length,false,pc.agrege)
-    +rpFlux(o)+'</div>'
-    +'<div><h2>État d\u2019avancement</h2>'+rpAvancement(o)+'</div></div>';
+  if(rapInclus("nature")){
+    var pc=plafonner(o.parCat,7,"autres natures");
+    h+='<div class="rp-duo"><div><h2>Nature des affaires</h2>'
+      +rpBarres(pc.l,o.acts.length,false,pc.agrege)
+      +rpFlux(o)+'</div>'
+      +'<div><h2>État d\u2019avancement</h2>'+rpAvancement(o)+'</div></div>';
+  }
   h+='</div>';
 
   h+='<div class="rp-page">'+rpTete("Charge et production",a,b,"Détail par domaine");
   /* la repartition du temps releve de la charge : a sa place ici, et la page 1
      cesse de deborder d'un tiers de feuille. */
-  h+='<h2>Répartition du temps tracé</h2>';
-  h+='<p class="rp-i">'+dureeLisible(o.totTemps)+' imputées sur '+o.ouvres+' jours ouvrés'
-    +(o.abs?', hors '+o.abs+' jour(s) d\u2019absence déclarés':"")+'. '
-    +'Le temps non tracé correspond aux déplacements, aux imprévus et aux tâches non consignées.</p>';
-  var pt=plafonner(o.temps,9,"autres rubriques");
-  h+=rpBarres(pt.l,o.totTemps,true,pt.agrege);
+  if(rapInclus("temps")){
+    h+='<h2>Répartition du temps tracé</h2>';
+    h+='<p class="rp-i">'+dureeLisible(o.totTemps)+' imputées sur '+o.ouvres+' jours ouvrés'
+      +(o.abs?', hors '+o.abs+' jour(s) d\u2019absence déclarés':"")+'. '
+      +'Le temps non tracé correspond aux déplacements, aux imprévus et aux tâches non consignées.</p>';
+    var pt=plafonner(o.temps,9,"autres rubriques");
+    h+=rpBarres(pt.l,o.totTemps,true,pt.agrege);
+  }
   /* le volume de notes releve de la production, pas des perspectives */
+  if(rapInclus("journal"))
   h+='<h2>Journal</h2><p class="rp-i">'+o.notes.length+' note(s) consignée(s)'
     +(o.ouvres?', soit '+(Math.round(o.notes.length/o.ouvres*10)/10).toString().replace(".",",")+' par jour ouvré':"")+'.'
     +(o.parTn.length?' '+o.parTn.slice(0,5).map(function(x){
         return esc(x[0])+' '+(o.notes.length?Math.round(x[1]*100/o.notes.length):0)+' %' }).join(', ')+'.':"")+'</p>';
-  h+='<div class="rp-duo">'
+  var duoCP=(rapInclus("compteur")?(''
     +'<div><h2>'+esc(P.titre_compteur||"Compteur de traitement")+'</h2><table class="rp-tab">'
       +'<tr><th>Indicateur</th><th style="text-align:right">Période</th><th style="text-align:right">Préc.</th></tr>'
       +'<tr><td>Jours de traitement</td><td class="n">'+o.dt.jours+'</td><td class="n">'+q.dt.jours+'</td></tr>'
       +'<tr><td>Dossiers traités</td><td class="n">'+o.dt.traites+'</td><td class="n">'+q.dt.traites+'</td></tr>'
       +'<tr><td>Temps chronométré</td><td class="n">'+dureeLisible(o.dt.temps)+'</td><td class="n">'+dureeLisible(q.dt.temps)+'</td></tr>'
       +'<tr><td>Cadence moyenne</td><td class="n">'+String(o.dt.cadence).replace(".",",")+' /h</td><td class="n">'+String(q.dt.cadence).replace(".",",")+' /h</td></tr>'
-      +'<tr><td>Meilleure journée</td><td class="n">'+o.dt.max+'</td><td class="n">'+q.dt.max+'</td></tr></table></div>'
+      +'<tr><td>Meilleure journée</td><td class="n">'+o.dt.max+'</td><td class="n">'+q.dt.max+'</td></tr></table></div>'):"")
+    +(rapInclus("permanence")?(''
     +'<div><h2>Assistance téléphonique</h2><table class="rp-tab">'
       +'<tr><th>Indicateur</th><th style="text-align:right">Période</th><th style="text-align:right">Préc.</th></tr>'
       +'<tr><td>Jours avec appels</td><td class="n">'+o.perm.jours+'</td><td class="n">'+q.perm.jours+'</td></tr>'
       +'<tr><td>Appels traités</td><td class="n">'+o.perm.appels+'</td><td class="n">'+q.perm.appels+'</td></tr>'
       +'<tr><td>Temps cumulé</td><td class="n">'+dureeLisible(o.perm.temps)+'</td><td class="n">'+dureeLisible(q.perm.temps)+'</td></tr>'
       +'<tr><td>Durée moyenne</td><td class="n">'+o.perm.moy+' min</td><td class="n">'+q.perm.moy+' min</td></tr>'
-      +'<tr><td>Vérifications tracées</td><td class="n">'+o.perm.verifs+'</td><td class="n">'+(q.perm.verifs||"\u2014")+'</td></tr></table></div>'
-  +'</div>';
-  if(o.parMotif.length){ var pm=plafonner(o.parMotif,6,"autres motifs");
+      +'<tr><td>Vérifications tracées</td><td class="n">'+o.perm.verifs+'</td><td class="n">'+(q.perm.verifs||"\u2014")+'</td></tr></table></div>'):"");
+  if(duoCP) h+='<div class="rp-duo">'+duoCP+'</div>';
+  if(rapInclus("permanence") && o.parMotif.length){ var pm=plafonner(o.parMotif,6,"autres motifs");
     h+='<h2>Motifs d\u2019appel</h2>'+rpBarres(pm.l,o.perm.appels,false,pm.agrege) }
-  if(o.parType.length){
+  if(rapInclus("permanence") && o.parType.length){
     h+='<h2>Types d\u2019intervention</h2><table class="rp-tab">'
       +'<tr><th>Type</th><th style="text-align:right">Nombre</th><th style="text-align:right">Part</th></tr>'
       +plafonner(o.parType,6,"autres types").l.map(function(x){
@@ -8247,21 +8575,23 @@ function construireRapportPDF(a,b){
   /* le detail des statuts ouvre la page 3 : la page 2 cessait de tenir des que le
      nombre de rubriques ou de motifs augmentait, et une ligne orpheline partait seule. */
   h+='<div class="rp-page">'+rpTete("Détail et prévention",a,b,"Avancement, risque, perspectives");
-  h+=rpStatutsDetail(o);
-  h+='<div class="rp-duo">'
+  if(rapInclus("statuts")) h+=rpStatutsDetail(o);
+  var duoVS=(rapInclus("vigilance")?(''
     +'<div><h2>Points de vigilance</h2><table class="rp-tab">'
       +'<tr><th>Niveau</th><th style="text-align:right">Déclarés</th><th style="text-align:right">Levés</th></tr>'
       +'<tr><td>Critique</td><td class="n">'+o.vig.critique.total+'</td><td class="n">'+o.vig.critique.leves+'</td></tr>'
       +'<tr><td>Attention</td><td class="n">'+o.vig.attention.total+'</td><td class="n">'+o.vig.attention.leves+'</td></tr>'
-      +'<tr><td>Information</td><td class="n">'+o.vig.info.total+'</td><td class="n">'+o.vig.info.leves+'</td></tr></table></div>'
+      +'<tr><td>Information</td><td class="n">'+o.vig.info.total+'</td><td class="n">'+o.vig.info.leves+'</td></tr></table></div>'):"")
+    +(rapInclus("suivi")?(''
     +'<div><h2>Actions de suivi</h2><table class="rp-tab">'
       +'<tr><th>Indicateur</th><th style="text-align:right">Nombre</th></tr>'
       +'<tr><td>Tâches ouvertes sur la période</td><td class="n">'+o.suites.total+'</td></tr>'
       +'<tr><td>Soldées à ce jour</td><td class="n">'+o.suites.soldees+'</td></tr>'
       +'<tr><td>Taux de solde</td><td class="n">'+(o.suites.total?Math.round(o.suites.soldees*100/o.suites.total):0)+' %</td></tr>'
-      +'<tr><td>Encore ouvertes et échues</td><td class="n">'+o.suites.echues+'</td></tr></table></div>'
-  +'</div>';
-  h+=rpPrevention(o);
+      +'<tr><td>Encore ouvertes et échues</td><td class="n">'+o.suites.echues+'</td></tr></table></div>'):"");
+  if(duoVS) h+='<div class="rp-duo">'+duoVS+'</div>';
+  if(rapInclus("prevention")) h+=rpPrevention(o);
+  if(rapInclus("faits"))
   h+='<h2>Faits marquants</h2><p class="rp-i">Ce que les chiffres ne disent pas.</p>'
     +'<div class="rp-saisie'+(P.rap_faits?"":" vide")+'">'
     +esc(P.rap_faits||"Section à renseigner dans l\u2019onglet Rapport.")+'</div>';
@@ -8281,6 +8611,7 @@ function construireRapportPDF(a,b){
   var finHorizon=iso(new Date(pIso(ch.horizon).getTime()-86400000));
   h+='<div class="rp-page">'+rpTete("Charge à venir",auj(),finHorizon,
       "Ce qui est déjà posé au calendrier");
+  if(rapInclus("charge")){
   h+='<h2>Ce qui attend</h2>';
   h+='<p class="rp-i">Décompte arrêté le '+esc(libJour(auj()))+', indépendant de la période du '
     +'rapport : il regarde devant. Un <b>rendez-vous</b> est une activité datée non close ; '
@@ -8304,6 +8635,8 @@ function construireRapportPDF(a,b){
       +'<p class="rp-i">Les huit semaines qui suivent, regroupées. Même lecture.</p>'
       +rpChargeSem(ch.semaines);
   }
+  }
+  if(rapInclus("lecture")){
   h+='<h2>Lecture</h2><ul class="rp-l">';
   h+='<li>Journée la plus chargée : <b>'+esc(libJour(piresJ.d))+'</b> — '
     +(piresJ.rdv+piresJ.tache)+' élément(s)'+(piresJ.rdv?', dont '+piresJ.rdv+' rendez-vous':"")+'.</li>';
@@ -8317,6 +8650,8 @@ function construireRapportPDF(a,b){
   h+='<li>'+ch.nonPilotes+' dossier(s) <b>non pilotés</b> : ni tâche en attente, ni événement à venir. '
     +'Ils ne pèsent sur aucune journée, et c\'est précisément le risque.</li>';
   h+='</ul>';
+  }
+  if(rapInclus("objectifs"))
   /* « Objectifs et besoins » vivait en fin de page « Detail », deja pleine : les deux
      blocs de texte libre y debordaient des qu'on ecrivait vraiment dedans. Il rejoint la
      page dont il parle — ce qu'il faut pour tenir ce qui vient — ou il a de la place. */
@@ -8328,7 +8663,7 @@ function construireRapportPDF(a,b){
     +'. Elle ne préjuge ni des urgences à venir, ni du temps réellement nécessaire à chaque '
     +'élément.</div></div>';
 
-  return h;
+  return rapElaguer(h);
 }
 function imprimerRapport(){
   var a=rapDeb||moisIso(0)[0], b=rapFin||moisIso(0)[1];
@@ -8433,6 +8768,7 @@ function ajouterNote(){
 }
 
 var JOURNAL_VERSIONS = [
+  ["1.7-public","<b>La fiche cesse de se d\u00e9rober.</b> Modifier un \u00e9v\u00e9nement, cocher un jalon ou enregistrer renvoyait la fen\u00eatre tout en haut : la position de lecture est d\u00e9sormais gard\u00e9e. <b>Enregistrer enregistre et ne ferme plus</b> \u2014 seules la croix et Fermer ferment, sur l\u2019activit\u00e9 comme sur la note. <b>Supprimer une note ram\u00e8ne \u00e0 son activit\u00e9</b> au lieu de tout refermer. Un <b>\u00e9v\u00e9nement commenc\u00e9 mais non ajout\u00e9</b> n\u2019est plus perdu en silence, comme une note ou une t\u00e2che. <b>Le type d\u2019intervention appartient \u00e0 l\u2019\u00e9v\u00e9nement</b> : il se choisit dans la liste de la cat\u00e9gorie, et le champ de la fiche en devient le reflet, comme la date ; la dur\u00e9e cesse d\u2019afficher 60 minutes en face d\u2019une date vide. <b>Les rubriques du rapport PDF se cochent</b>, et une page enti\u00e8rement d\u00e9coch\u00e9e ne s\u2019imprime pas. <b>Les jeux de statuts se modifient et se cr\u00e9ent</b> : les deux jeux qui vivaient dans le code entrent dans le fichier, au format code|libell\u00e9, et retirer un code employ\u00e9 est signal\u00e9 avant d\u2019\u00eatre subi. \u00ab \u00c0 planifier \u00bb ouvre le jeu simple. <b>Aucune liste ne reste invisible</b> : l\u2019\u00e9cran part de ce que le fichier contient et non d\u2019une \u00e9num\u00e9ration \u00e9crite en dur, et l\u2019on peut en cr\u00e9er. Enfin, le bouton Aide en double a quitt\u00e9 les Id\u00e9es."],
   ["1.6-public","<b>Le bandeau accueille Options</b>, entre Aide et Accompagnement. La rang\u00e9e d\u2019onglets demandait 1188 px : sur un \u00e9cran en portrait elle d\u00e9bordait et le dernier onglet \u00e9tait coup\u00e9. Options n\u2019est pas un endroit o\u00f9 l\u2019on travaille mais le r\u00e9glage de l\u2019outil : sa place est aupr\u00e8s d\u2019Aide, d\u2019\u00c0 propos et de la Pause. Le bouton s\u2019allume quand on y est. <b>Le liseré de l\u2019onglet actif redevient visible</b> : il \u00e9tait rouge sur le trait rouge du bandeau, et d\u00e9bordait de surcro\u00eet d\u2019une zone que le navigateur d\u00e9coupe ; il est blanc, et interrompt le trait rouge \u00e0 l\u2019endroit o\u00f9 l\u2019on se trouve. Enfin, deux r\u00e9glages de largeur \u00e9crits avant la r\u00e8gle qu\u2019ils devaient corriger ne s\u2019appliquaient jamais : la rang\u00e9e se resserre d\u00e9sormais vraiment sur un \u00e9cran \u00e9troit."],
   ["1.5-public","<b>Options r\u00e9organis\u00e9e.</b> L\u2019\u00e9cran faisait pr\u00e8s de quatre \u00e9crans de haut pour quatre blocs, dont deux fourre-tout : \u00ab Fichier de donn\u00e9es \u00bb contenait le rapport, l\u2019identit\u00e9 et le compte-rendu, et deux s\u00e9lecteurs de p\u00e9riode y cohabitaient ; l\u2019import Excel \u00e9tait s\u00e9par\u00e9 de son propre r\u00e9glage par trois \u00e9crans. Six sections r\u00e9pondent d\u00e9sormais chacune \u00e0 une t\u00e2che \u2014 Fichier, Import et export, Organisation, Cat\u00e9gories, Listes, Affichage \u2014 et se choisissent par une rang\u00e9e d\u2019onglets. Le rapport, le compte-rendu et l\u2019identit\u00e9 qui les signe ne sont pas des r\u00e9glages mais des productions : ils ont leur propre onglet <b>Rapport</b>."],
   ["1.4-public","Le Journal regroupe les <b>notes sans rattachement</b> \u2014 ni activit\u00e9, ni rubrique \u2014 et permet de les ranger sur place. Elles n\u2019apparaissaient jusqu\u2019ici nulle part, tout en comptant dans les totaux. Supprimer une rubrique garde d\u00e9sormais la trace de ce \u00e0 quoi chaque note \u00e9tait rattach\u00e9e, si bien qu\u2019on sait d\u2019o\u00f9 elles viennent."],
@@ -9085,7 +9421,7 @@ function vueIdees(){
   return '<div class="bloc"><div class="bloc-tete"><h2>Idées</h2>'
     +'<span class="compte">'+M.libres.length+' idée(s) · '+M.metas.length+' groupe(s) · '
       +u.length+' cristallisée(s)</span>'
-    +'<button class="b mini creux" data-aide="idees">Aide</button></div>'
+    +'</div>'
   +'<div class="bloc-corps">'
     +'<div class="saisie">'
       +'<input type="text" id="idTitre" placeholder="Une idée en une ligne…" maxlength="200" '
@@ -9911,6 +10247,7 @@ document.addEventListener("click",function(e){
     return;
   }
   if((el=t.closest("[data-fait]"))){ cloreSuite(el.dataset.fait); return }
+  if((el=t.closest("[data-liste-sup]"))){ supprimerListe(el.getAttribute("data-liste-sup")); return }
   if((el=t.closest("[data-sopt]"))){ ongletOptions=el.getAttribute("data-sopt"); rendre(); return }
   if((el=t.closest("[data-proj]"))){ editerChantier(el.getAttribute("data-proj")); return }
   if((el=t.closest("[data-jalon]"))){ basculerJalon(el.getAttribute("data-jalon")); return }
@@ -10270,6 +10607,11 @@ document.addEventListener("click",function(e){
     }
     else if(a==="param"){ vueActive="param"; rendre() }
     else if(a==="retour-donnees"){ vueActive="donnees"; rendre() }
+    else if(a==="liste-neuve"){ creerListe() }
+    else if(a==="jeu-neuf"){ creerJeuStatuts() }
+    else if(a==="rap-tout"){ D.parametres.rap_hors={}; modifie(); rendre() }
+    else if(a==="rap-rien"){ var _x={}; RAP_SECTIONS.forEach(function(r){ _x[r[0]]=1 });
+      D.parametres.rap_hors=_x; modifie(); rendre() }
     else if(a==="cat-new"){
       var cle="cat"+uid();
       D.parametres.categories.push(normaliserCat({cle:cle,lib:"Nouvelle catégorie",plur:"Nouvelles catégories",
@@ -10473,6 +10815,13 @@ document.addEventListener("change",function(e){
     rm.minutes=Math.max(1,+t.value||15); rm.dernier=hNow(); rm.alerte=false;
     modifie(); rendre(); return;
   }
+  if(t.dataset && t.dataset.raprub!==undefined){
+    basculerRubriqueRap(t.dataset.raprub,t.checked);
+    var _n=RAP_SECTIONS.filter(function(r){ return rapInclus(r[0]) }).length;
+    var _c=t.closest(".bloc"); if(_c){ var _s=_c.querySelector(".compte");
+      if(_s) _s.textContent=_n+" / "+RAP_SECTIONS.length }
+    return;
+  }
   if(t.dataset && t.dataset.listeTxt!==undefined){
     var cle=t.dataset.listeTxt;
     var l=t.value.split("\n").map(function(x){return x.trim()}).filter(Boolean);
@@ -10483,6 +10832,17 @@ document.addEventListener("change",function(e){
     }
     var avant=(D.parametres[cle]||[]).join("\n");
     if(l.join("\n")===avant) return;
+    /* Un jeu de statuts n'est pas une liste ordinaire : en retirer un code ne retire
+       pas la valeur des fiches, il la rend seulement introuvable dans le menu. On ne
+       l'interdit pas \u2014 c'est parfois exactement ce qu'on veut \u2014 mais on le dit. */
+    if(estJeuStatuts(cle)){
+      var orph=statutsOrphelins(cle,l);
+      if(orph.nb && !confirm(orph.nb+" activit\u00e9(s) portent un code que ce jeu ne propose plus :\n\n"
+          +orph.valeurs.join(", ")+"\n\nElles gardent leur valeur, mais elle n'appara\u00eetra plus dans le menu "
+          +"tant que le code n'y revient pas.\n\nEnregistrer quand m\u00eame ?")){
+        t.value=avant; return;
+      }
+    }
     D.parametres[cle]=l;
     modifie();
     toast(l.length+" valeur(s) enregistrée(s)");

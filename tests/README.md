@@ -52,6 +52,7 @@ nul si quelque chose a cassé. Les plus récentes :
 | `test62.js` | notes sans rattachement : les retrouver et les ranger |
 | `test63.js` | Options en six sections : rien de perdu, et ce qui va ensemble l'est |
 | `test64.js` | la rangée d'onglets tient en portrait, et l'on voit où l'on est |
+| `test65.js` | le lot de la v1.7 : fiche, événements, rapport, listes, jeux de statuts |
 | `test59.js` | le convertisseur de l'ancien format, et le rechargement du résultat |
 | `pagi5.js` | pagination du rapport imprimé, sous charge |
 | `mesure.js` | mise en page de la carte des idées à plusieurs largeurs |

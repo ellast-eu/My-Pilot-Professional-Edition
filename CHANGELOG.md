@@ -3,6 +3,10 @@
 Copie du journal intégré à l'application (**À propos → Journal des versions**).
 La version faisant foi est celle du code.
 
+## 1.7-public
+
+<b>La fiche cesse de se dérober.</b> Modifier un événement, cocher un jalon ou enregistrer renvoyait la fenêtre tout en haut : la position de lecture est désormais gardée. <b>Enregistrer enregistre et ne ferme plus</b> — seules la croix et Fermer ferment, sur l’activité comme sur la note. <b>Supprimer une note ramène à son activité</b> au lieu de tout refermer. Un <b>événement commencé mais non ajouté</b> n’est plus perdu en silence, comme une note ou une tâche. <b>Le type d’intervention appartient à l’événement</b> : il se choisit dans la liste de la catégorie, et le champ de la fiche en devient le reflet, comme la date ; la durée cesse d’afficher 60 minutes en face d’une date vide. <b>Les rubriques du rapport PDF se cochent</b>, et une page entièrement décochée ne s’imprime pas. <b>Les jeux de statuts se modifient et se créent</b> : les deux jeux qui vivaient dans le code entrent dans le fichier, au format code|libellé, et retirer un code employé est signalé avant d’être subi. « À planifier » ouvre le jeu simple. <b>Aucune liste ne reste invisible</b> : l’écran part de ce que le fichier contient et non d’une énumération écrite en dur, et l’on peut en créer. Enfin, le bouton Aide en double a quitté les Idées.
+
 ## 1.6-public
 
 <b>Le bandeau accueille Options</b>, entre Aide et Accompagnement. La rangée d’onglets demandait 1188 px : sur un écran en portrait elle débordait et le dernier onglet était coupé. Options n’est pas un endroit où l’on travaille mais le réglage de l’outil : sa place est auprès d’Aide, d’À propos et de la Pause. Le bouton s’allume quand on y est. <b>Le liseré de l’onglet actif redevient visible</b> : il était rouge sur le trait rouge du bandeau, et débordait de surcroît d’une zone que le navigateur découpe ; il est blanc, et interrompt le trait rouge à l’endroit où l’on se trouve. Enfin, deux réglages de largeur écrits avant la règle qu’ils devaient corriger ne s’appliquaient jamais : la rangée se resserre désormais vraiment sur un écran étroit.

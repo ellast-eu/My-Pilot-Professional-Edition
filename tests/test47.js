@@ -73,8 +73,12 @@ const J=n=>{const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().s
  await p.fill('#fnTxt','   ');
  await p.evaluate(()=>[...document.querySelectorAll('#modPied button')]
    .find(e=>e.textContent.trim()==='Enregistrer').click()); await p.waitForTimeout(450);
+ /* v1.7 : Enregistrer enregistre et ne ferme plus — seules la croix et Fermer
+    ferment. « L'enregistrement passe » se lit donc a la garde franchie et a la
+    fiche toujours ouverte, non a la fenetre refermee. */
  T('champ vidé : l’enregistrement passe',
-   await p.evaluate(()=>document.getElementById('modale').open===false));
+   await p.evaluate(()=>document.getElementById('modale').open===true
+     && !document.querySelector('#fnTxt.manque')));
 
  /* --- 3. ajouter, puis enregistrer --------------------------------------- */
  await ouvrirFiche();
@@ -87,8 +91,8 @@ const J=n=>{const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().s
    await p.evaluate(()=>!document.getElementById('fnTxt')));
  await p.evaluate(()=>[...document.querySelectorAll('#modPied button')]
    .find(e=>e.textContent.trim()==='Enregistrer').click()); await p.waitForTimeout(400);
- T('  l’enregistrement passe ensuite',
-   await p.evaluate(()=>document.getElementById('modale').open===false));
+ T('  l’enregistrement passe ensuite, fiche toujours ouverte',
+   await p.evaluate(()=>document.getElementById('modale').open===true));
 
  /* --- 4. une tâche se comporte pareil ------------------------------------ */
  await ouvrirFiche();

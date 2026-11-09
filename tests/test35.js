@@ -153,7 +153,11 @@ const T=(n,c,d='')=>{(c?ok:ko).push(n+(d?' — '+d:''))};
    ['le titre avec référence et libellé',/^Dossier — RAC-SIR-26-007967 · TISSAGES QUINTENAS/m],
    ['le statut en clair sous le nom du champ miroir',/État\s+: \S.*[a-zéè]/],
    ['le champ miroir ne fait pas doublon',/^(?!.*\n.*État\s+:)/m],
-   ['l’heure sans date ne s’annonce pas « Date »',/Heure\s+: 08:30 · 1 h 00/],
+   /* v1.7 : heure et duree decrivent l'evenement de reference. Une activite qui n'en
+      porte aucun n'a donc ni l'une ni l'autre — et surtout pas une ligne « Date »,
+      ce que ce banc verifiait a l'origine. */
+   ['sans événement, aucune ligne Date',/^(?!.*\nDate\s+:)/m],
+   ['  ni heure ni durée orphelines',/^(?!.*\n(Heure|Durée)\s+:)/m],
    ['le type d’intervention',/Type\s+: Visite de chantier/],
    ['l’interlocuteur',/MEROUR/],
    ['un second identifiant : la référence technique',/Référence technique\s+: 30001910099101/],
